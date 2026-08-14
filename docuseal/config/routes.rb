@@ -69,7 +69,14 @@ Rails.application.routes.draw do
   resource :user_initials, only: %i[edit update destroy]
   resources :submissions_archived, only: %i[index], path: 'submissions/archived'
   resources :submissions, only: %i[index], controller: 'submissions_dashboard'
+  resources :ai_submissions, only: %i[new create] do
+    collection do
+      get :template_fields
+      post :extract
+    end
+  end
   resources :submissions, only: %i[show destroy] do
+
     resources :unarchive, only: %i[create], controller: 'submissions_unarchive'
     resources :events, only: %i[index], controller: 'submission_events'
     resources :download, only: %i[index], controller: 'submissions_download'

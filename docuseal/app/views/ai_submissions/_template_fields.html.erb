@@ -1,0 +1,89 @@
+<% fields = template.fields.to_a %>
+<% submitters = template.submitters.to_a %>
+<%
+  translations = {
+    'Nombor Pesanan' => 'Order Number',
+    'Nama Penerima ("Pihak B")' => 'Recipient Name',
+    'Nombor Telefon ("Pihak B")' => 'Recipient Phone',
+    'Alamat Penghantaran ("Pihak B")' => 'Delivery Address',
+    'E-mel ("Pihak B")' => 'Recipient Email',
+    'Nama Produk' => 'Product Name / Model',
+    'Nombor IMEI Telefon' => 'IMEI Number',
+    'Siri Telefon' => 'Serial Number',
+    'Nombor IMEI Telefon/ Siri Telefon' => 'IMEI / Serial Number',
+    'Kuantiti Peralatan' => 'Equipment Quantity',
+    'Tarikh mula sewaan' => 'Rental Start Date',
+    'Tarikh akhir sewaan' => 'Rental End Date',
+    'Jumlah Tempoh Sewaan' => 'Total Rental Period',
+    'Harga Sewa Sebulan' => 'Monthly Rental Price',
+    'Jumlah Sewa' => 'Total Rental Amount',
+    'Deposit Produk' => 'Product Deposit',
+    'Harga Pasaran/Harga Produk' => 'Retail / Market Price',
+    'Tandatangan Penerima ("Pihak B")' => 'Recipient Signature',
+    'Nama' => 'Name',
+    'No. Kad Pengenalan' => 'IC / MyKad Number',
+    'Tarikh Penerimaan' => 'Receipt Date',
+    'Haribulan' => 'Day of Month',
+    'Bulan' => 'Month',
+    'Tahun' => 'Year'
+  }
+%>
+
+<div class="mt-3 bg-base-200/80 rounded-2xl border border-base-300 overflow-hidden shadow-2xs">
+  <details open class="group">
+    <!-- Accordion Summary / Header -->
+    <summary class="flex items-center justify-between p-3.5 cursor-pointer select-none bg-base-200 hover:bg-base-300/60 transition-colors list-none">
+      <div class="flex items-center space-x-2">
+        <span class="font-bold text-xs uppercase tracking-wider text-base-content/80">Fields Required for this Template</span>
+        <span class="badge badge-sm badge-neutral font-bold"><%= fields.size %></span>
+      </div>
+      <div class="flex items-center space-x-2">
+        <span class="text-[11px] text-base-content/50 group-open:hidden">Click to expand</span>
+        <span class="text-[11px] text-base-content/50 hidden group-open:inline">Click to collapse</span>
+        <div class="p-1 rounded-md bg-base-100/80 text-base-content/70 group-open:rotate-180 transition-transform duration-200">
+          <%= svg_icon('chevron_down', class: 'w-4 h-4 stroke-2') %>
+        </div>
+      </div>
+    </summary>
+
+    <!-- Accordion Body -->
+    <div class="p-3.5 pt-1 border-t border-base-300 space-y-2">
+      <div class="flex items-center justify-between py-1 text-[11px] text-base-content/60">
+        <span>AI will extract and map all matching fields automatically</span>
+        <span class="font-mono text-[10px]"><%= fields.size %> items</span>
+      </div>
+
+      <% if fields.blank? %>
+        <div class="text-xs text-warning py-3 flex items-center space-x-1.5">
+          <%= svg_icon('alert_circle', class: 'w-4 h-4') %>
+          <span>This template currently has no form fields defined.</span>
+        </div>
+      <% else %>
+        <div class="max-h-80 overflow-y-auto pr-1 space-y-1.5 scrollbar-thin">
+          <% fields.each_with_index do |f, idx| %>
+            <% sub = submitters.find { |s| s['uuid'] == f['submitter_uuid'] } %>
+            <% en_trans = translations[f['name']] %>
+            <div class="flex items-center justify-between text-xs py-2 px-3 bg-base-100 rounded-xl border border-base-200/80 hover:border-neutral-900 transition-all shadow-2xs">
+              <div class="flex items-center space-x-1.5 min-w-0 flex-wrap">
+                <span class="text-[11px] font-mono text-base-content/40 w-4 text-right"><%= idx + 1 %>.</span>
+                <span class="font-semibold text-base-content truncate"><%= f['name'] %></span>
+                <% if en_trans.present? %>
+                  <span class="text-[11px] text-base-content/50 font-normal italic">(<%= en_trans %>)</span>
+                <% end %>
+                <% if f['required'] %>
+                  <span class="text-error font-bold text-sm leading-none" title="Required field">*</span>
+                <% end %>
+              </div>
+              <div class="flex items-center space-x-1.5 flex-shrink-0 ml-2">
+                <span class="badge badge-xs badge-ghost text-[10px] uppercase font-mono"><%= f['type'] || 'text' %></span>
+                <% if sub %>
+                  <span class="badge badge-xs badge-outline text-[10px] max-w-[120px] truncate"><%= sub['name'] %></span>
+                <% end %>
+              </div>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
+    </div>
+  </details>
+</div>

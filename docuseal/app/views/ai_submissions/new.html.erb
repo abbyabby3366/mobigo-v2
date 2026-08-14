@@ -1,0 +1,441 @@
+<div class="space-y-6 max-w-5xl mx-auto py-2">
+  <!-- Back Link & Page Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-base-300">
+    <div>
+      <div class="flex items-center space-x-2 text-xs text-base-content/60 mb-1">
+        <%= link_to submissions_path, class: 'hover:text-primary flex items-center space-x-1 font-medium' do %>
+          <%= svg_icon('arrow_left', class: 'w-3.5 h-3.5') %>
+          <span>Submissions</span>
+        <% end %>
+        <span>/</span>
+        <span class="text-base-content/90 font-medium">Create with AI</span>
+      </div>
+      <div class="flex items-center space-x-3">
+        <div class="p-2 bg-neutral-900 rounded-xl text-yellow-400 shadow-sm">
+          <%= svg_icon('sparkles', class: 'w-6 h-6 stroke-2') %>
+        </div>
+        <div>
+          <h1 class="text-2xl font-bold text-base-content">Create Submission with AI</h1>
+          <p class="text-xs text-base-content/60 mt-0.5">Extract customer details, MyKad IC, calculator terms & box IMEI with Gemini 3.6 Flash</p>
+        </div>
+      </div>
+    </div>
+    <div class="flex items-center space-x-2">
+      <span class="badge badge-neutral text-xs font-mono py-3 px-3">Gemini 3.6 Flash</span>
+      <span class="badge badge-outline text-xs py-3 px-3">Multimodal OCR & Vision</span>
+    </div>
+  </div>
+
+  <div id="ai_submission_wizard" class="space-y-6">
+    <!-- 2-Column Setup Grid for Step 1 & Step 2 -->
+    <div id="ai_setup_grid" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      
+      <!-- Left Column: Template Selection & Required Fields (5 cols) -->
+      <div class="lg:col-span-5 space-y-4">
+        <div class="card bg-base-100 border border-base-300 rounded-2xl p-5 shadow-sm space-y-4">
+          <div>
+            <label for="ai_template_select" class="block text-xs font-bold uppercase tracking-wider text-base-content/80 mb-2">
+              1. Select Document Template
+            </label>
+            <% if @templates.blank? %>
+              <div class="alert alert-warning text-xs p-3 rounded-xl">
+                <%= svg_icon('alert_circle', class: 'w-4 h-4') %>
+                <span>No active templates found. Please create a template first.</span>
+              </div>
+            <% else %>
+              <select id="ai_template_select" name="template_id" class="select select-bordered select-sm w-full text-xs font-medium rounded-xl focus:border-primary" onchange="onTemplateChange(this.value)">
+                <% @templates.each do |tmpl| %>
+                  <option value="<%= tmpl.id %>" <%= 'selected' if tmpl.id == @template&.id %>>
+                    <%= tmpl.name %> (<%= tmpl.fields.to_a.size %> fields)
+                  </option>
+                <% end %>
+              </select>
+            <% end %>
+          </div>
+
+          <!-- Template Fields Container -->
+          <div id="template_fields_container">
+            <% if @template %>
+              <%= render 'template_fields', template: @template %>
+            <% end %>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Data Upload & Inputs (7 cols) -->
+      <div class="lg:col-span-7 space-y-4" id="ai_upload_section">
+        <div class="card bg-base-100 border border-base-300 rounded-2xl p-5 shadow-sm space-y-4">
+          <div class="flex items-center justify-between pb-3 border-b border-base-200">
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-base-content/80">
+                2. Input Data & Upload Documents
+              </label>
+              <p class="text-xs text-base-content/60 mt-0.5">
+                Paste text/notes or upload IC photos, calculator screenshots, and box labels.
+              </p>
+            </div>
+            <!-- Paste from Clipboard Button -->
+            <button type="button" id="paste_clipboard_btn" onclick="pasteFromClipboard()" class="btn btn-sm !bg-neutral-900 hover:!bg-black !text-white !border-neutral-900 gap-1.5 text-xs !rounded-xl shadow-sm hover:shadow-md transition-all flex-shrink-0 flex items-center font-semibold">
+              <%= svg_icon('clipboard', class: 'w-4 h-4 stroke-2 text-white') %>
+              <span id="paste_clipboard_label" class="text-white font-semibold">Paste from Clipboard</span>
+            </button>
+          </div>
+
+          <!-- Text / Notes Input -->
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label for="ai_text_input" class="text-xs font-semibold text-base-content/80">
+                Paste Text, WhatsApp Message or Order Notes
+              </label>
+              <span class="text-[11px] text-base-content/50">Optional</span>
+            </div>
+            <textarea id="ai_text_input" name="text" rows="5" class="textarea textarea-bordered textarea-sm w-full text-xs rounded-xl focus:border-neutral-900 font-mono" placeholder="Paste customer WhatsApp message, order notes, email, calculator details, or instructions here..."></textarea>
+          </div>
+
+
+          <!-- File Dropzone for Pictures & PDFs -->
+          <div>
+            <label class="block text-xs font-semibold text-base-content/80 mb-1">
+              Upload Images & PDF Documents
+            </label>
+            <div id="ai_file_dropzone" onclick="document.getElementById('ai_file_input').click()" class="border-2 border-dashed border-base-300 hover:border-neutral-900 bg-base-200/40 hover:bg-base-200/80 rounded-2xl p-6 text-center cursor-pointer transition-all">
+              <input type="file" id="ai_file_input" multiple accept="image/*,application/pdf" class="hidden" onchange="handleFileSelect(this.files)">
+              <div class="flex flex-col items-center justify-center space-y-2">
+                <div class="p-3 bg-neutral-900 text-white rounded-full shadow-sm">
+                  <%= svg_icon('cloud_upload', class: 'w-6 h-6 stroke-2') %>
+                </div>
+                <div>
+                  <span class="text-xs font-bold text-base-content">Click to upload</span>
+                  <span class="text-xs text-base-content/70"> or drag and drop files here</span>
+                </div>
+                <p class="text-[11px] text-base-content/50">Supports PDF, PNG, JPG, JPEG, WEBP (MyKad IC, calculator screenshots, IMEI labels)</p>
+              </div>
+            </div>
+
+            <!-- Selected Files List -->
+            <div id="ai_selected_files_list" class="mt-3 space-y-1.5 hidden">
+              <div class="text-xs font-semibold text-base-content/80 flex items-center justify-between">
+                <span>Selected Files (<span id="ai_file_count">0</span>)</span>
+                <button type="button" onclick="clearSelectedFiles()" class="text-error hover:underline text-[11px]">Clear all</button>
+              </div>
+              <div id="ai_files_badge_container" class="space-y-1.5 max-h-40 overflow-y-auto"></div>
+            </div>
+          </div>
+
+          <!-- Extract Button & Error Alert -->
+          <div id="ai_extract_error" class="hidden alert alert-error text-xs p-3 rounded-xl"></div>
+
+          <div class="pt-3 flex justify-end">
+            <button type="button" id="ai_extract_btn" onclick="startAiExtraction()" class="btn btn-neutral !bg-neutral-900 hover:!bg-black !text-white text-xs px-8 shadow-sm hover:shadow-md transition-all gap-2 !rounded-xl !h-11">
+              <%= svg_icon('sparkles', class: 'w-4 h-4 stroke-2 text-yellow-400') %>
+              <span id="ai_extract_btn_text" class="font-bold text-sm text-white">Extract with AI & Populate Fields</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Loading State -->
+    <div id="ai_loading_state" class="hidden card bg-base-100 border border-base-300 rounded-2xl p-12 text-center space-y-4 shadow-sm">
+      <div class="flex justify-center">
+        <div class="p-4 bg-neutral-900 rounded-2xl text-yellow-400 shadow-md animate-pulse">
+          <%= svg_icon('sparkles', class: 'w-10 h-10 stroke-2 animate-spin') %>
+        </div>
+      </div>
+      <div class="text-lg font-bold text-base-content">Analyzing Documents & Extracting Fields...</div>
+      <p class="text-xs text-base-content/60 max-w-md mx-auto leading-relaxed">
+        Gemini 3.6 Flash is extracting MyKad IC details, device IMEI/Serial numbers, calculator rental terms, and populating all required agreement fields.
+      </p>
+    </div>
+
+    <!-- Step 3: Extracted Results Container -->
+    <div id="ai_extraction_results" class="hidden"></div>
+  </div>
+</div>
+
+<script>
+  window.aiSelectedFiles = [];
+
+  window.onTemplateChange = function(templateId) {
+    if (!templateId) return;
+    const container = document.getElementById('template_fields_container');
+    container.innerHTML = '<div class="text-xs text-base-content/50 py-3 text-center animate-pulse">Loading template fields...</div>';
+
+    fetch(`/ai_submissions/template_fields?template_id=${templateId}`, {
+      headers: { 'Accept': 'text/html' }
+    })
+    .then(res => res.text())
+    .then(html => {
+      container.innerHTML = html;
+    })
+    .catch(err => {
+      container.innerHTML = `<div class="text-xs text-error py-2">Failed to load fields: ${err.message}</div>`;
+    });
+  };
+
+  window.handleFileSelect = function(files) {
+    if (!files || files.length === 0) return;
+    for (let i = 0; i < files.length; i++) {
+      window.aiSelectedFiles.push(files[i]);
+    }
+    renderSelectedFiles();
+  };
+
+  window.removeSelectedFile = function(idx) {
+    window.aiSelectedFiles.splice(idx, 1);
+    renderSelectedFiles();
+  };
+
+  window.clearSelectedFiles = function() {
+    window.aiSelectedFiles = [];
+    const fileInput = document.getElementById('ai_file_input');
+    if (fileInput) fileInput.value = '';
+    renderSelectedFiles();
+  };
+
+  function renderSelectedFiles() {
+    const container = document.getElementById('ai_files_badge_container');
+    const listWrapper = document.getElementById('ai_selected_files_list');
+    const countSpan = document.getElementById('ai_file_count');
+    if (!container || !listWrapper || !countSpan) return;
+
+    if (window.aiSelectedFiles.length === 0) {
+      listWrapper.classList.add('hidden');
+      container.innerHTML = '';
+      return;
+    }
+
+    listWrapper.classList.remove('hidden');
+    countSpan.textContent = window.aiSelectedFiles.length;
+    container.innerHTML = '';
+
+    window.aiSelectedFiles.forEach((file, idx) => {
+      const item = document.createElement('div');
+      item.className = 'flex items-center justify-between p-2.5 bg-base-200/80 rounded-xl text-xs border border-base-300/60';
+      const isPdf = file.name.toLowerCase().endsWith('.pdf');
+      const iconSvg = isPdf ? '📄' : '🖼️';
+      const sizeKb = (file.size / 1024).toFixed(1);
+
+      item.innerHTML = `
+        <div class="flex items-center space-x-2 truncate">
+          <span class="text-base">${iconSvg}</span>
+          <span class="font-medium text-base-content truncate">${file.name}</span>
+          <span class="text-[10px] text-base-content/50 font-mono">(${sizeKb} KB)</span>
+        </div>
+        <button type="button" onclick="removeSelectedFile(${idx})" class="btn btn-ghost btn-xs text-error hover:bg-error/10 px-2 rounded-lg">✕</button>
+      `;
+      container.appendChild(item);
+    });
+  }
+
+  // Paste from Clipboard functionality (Supports both Text and Images)
+  window.pasteFromClipboard = async function() {
+    const label = document.getElementById('paste_clipboard_label');
+    const textarea = document.getElementById('ai_text_input');
+
+    try {
+      let pastedSomething = false;
+
+      // Try reading items (images and rich clipboard)
+      if (navigator.clipboard && navigator.clipboard.read) {
+        try {
+          const items = await navigator.clipboard.read();
+          for (const item of items) {
+            for (const type of item.types) {
+              if (type.startsWith('image/')) {
+                const blob = await item.getType(type);
+                const ext = type.split('/')[1] || 'png';
+                const file = new File([blob], `clipboard_image_${Date.now()}.${ext}`, { type });
+                window.aiSelectedFiles.push(file);
+                pastedSomething = true;
+              }
+            }
+          }
+        } catch (e) {
+          // Fall back to readText if read() fails
+        }
+      }
+
+      // Try reading text
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        const text = await navigator.clipboard.readText();
+        if (text && text.trim().length > 0) {
+          if (textarea.value && textarea.value.trim().length > 0) {
+            textarea.value += '\n' + text.trim();
+          } else {
+            textarea.value = text.trim();
+          }
+          pastedSomething = true;
+        }
+      }
+
+      if (pastedSomething) {
+        renderSelectedFiles();
+        if (label) {
+          label.textContent = 'Pasted!';
+          setTimeout(() => { label.textContent = 'Paste from Clipboard'; }, 2000);
+        }
+      } else {
+        if (label) {
+          label.textContent = 'Clipboard is empty';
+          setTimeout(() => { label.textContent = 'Paste from Clipboard'; }, 2000);
+        }
+      }
+    } catch (err) {
+      if (label) {
+        label.textContent = 'Paste failed';
+        setTimeout(() => { label.textContent = 'Paste from Clipboard'; }, 2000);
+      }
+    }
+  };
+
+  // Global Paste (Ctrl+V / Cmd+V) on page
+  document.addEventListener('paste', function(e) {
+    const wizard = document.getElementById('ai_submission_wizard');
+    if (!wizard) return;
+
+    const items = (e.clipboardData || e.originalEvent?.clipboardData)?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        const file = items[i].getAsFile();
+        if (file) {
+          window.aiSelectedFiles.push(file);
+          renderSelectedFiles();
+        }
+      }
+    }
+  });
+
+  // Drag & Drop handling
+  const dropzone = document.getElementById('ai_file_dropzone');
+  if (dropzone) {
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropzone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzone.classList.add('border-neutral-900', 'bg-base-200');
+      }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropzone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzone.classList.remove('border-neutral-900', 'bg-base-200');
+      }, false);
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+      const dt = e.dataTransfer;
+      const files = dt.files;
+      handleFileSelect(files);
+    }, false);
+  }
+
+  window.startAiExtraction = function() {
+    const templateSelect = document.getElementById('ai_template_select');
+    const templateId = templateSelect ? templateSelect.value : null;
+    const textInput = document.getElementById('ai_text_input');
+    const text = textInput ? textInput.value.trim() : '';
+    const emailInput = document.getElementById('ai_recipient_email_input');
+    const recipientEmail = emailInput ? emailInput.value.trim() : '';
+    const errorDiv = document.getElementById('ai_extract_error');
+    const uploadSection = document.getElementById('ai_setup_grid');
+    const loadingState = document.getElementById('ai_loading_state');
+    const resultsContainer = document.getElementById('ai_extraction_results');
+
+    errorDiv.classList.add('hidden');
+    errorDiv.textContent = '';
+
+    if (!templateId) {
+      errorDiv.textContent = 'Please select a document template.';
+      errorDiv.classList.remove('hidden');
+      return;
+    }
+
+    if (!text && !recipientEmail && window.aiSelectedFiles.length === 0) {
+      errorDiv.textContent = 'Please provide some text, enter an email, or upload at least one image or PDF document.';
+      errorDiv.classList.remove('hidden');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('template_id', templateId);
+    formData.append('text', text);
+    if (recipientEmail) {
+      formData.append('recipient_email', recipientEmail);
+    }
+
+    window.aiSelectedFiles.forEach(file => {
+      formData.append('files[]', file);
+    });
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+    if (uploadSection) uploadSection.classList.add('hidden');
+    loadingState.classList.remove('hidden');
+    resultsContainer.classList.add('hidden');
+
+    fetch('/ai_submissions/extract', {
+      method: 'POST',
+      headers: {
+        'X-CSRF-Token': csrfToken || '',
+        'Accept': 'text/html'
+      },
+      body: formData
+    })
+    .then(async (res) => {
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: 'Extraction failed.' }));
+        throw new Error(errData.error || `Error ${res.status}: ${res.statusText}`);
+      }
+      return res.text();
+    })
+    .then(html => {
+      loadingState.classList.add('hidden');
+      resultsContainer.innerHTML = html;
+      resultsContainer.classList.remove('hidden');
+    })
+    .catch(err => {
+      loadingState.classList.add('hidden');
+      if (uploadSection) uploadSection.classList.remove('hidden');
+      errorDiv.textContent = err.message || 'An unexpected error occurred during AI extraction.';
+      errorDiv.classList.remove('hidden');
+    });
+  };
+
+  window.switchAiTab = function(tabName) {
+    const formTab = document.getElementById('ai_tab_form');
+    const jsonTab = document.getElementById('ai_tab_json');
+    const formBtn = document.getElementById('tab_btn_form');
+    const jsonBtn = document.getElementById('tab_btn_json');
+    if (!formTab || !jsonTab) return;
+
+    if (tabName === 'form') {
+      formTab.classList.remove('hidden');
+      jsonTab.classList.add('hidden');
+      if (formBtn) formBtn.className = 'py-2.5 px-4 text-xs font-bold border-b-2 border-neutral-900 text-neutral-900 transition-colors';
+      if (jsonBtn) jsonBtn.className = 'py-2.5 px-4 text-xs font-semibold border-b-2 border-transparent text-base-content/60 hover:text-base-content transition-colors flex items-center space-x-1';
+    } else {
+      formTab.classList.add('hidden');
+      jsonTab.classList.remove('hidden');
+      if (jsonBtn) jsonBtn.className = 'py-2.5 px-4 text-xs font-bold border-b-2 border-neutral-900 text-neutral-900 transition-colors flex items-center space-x-1';
+      if (formBtn) formBtn.className = 'py-2.5 px-4 text-xs font-semibold border-b-2 border-transparent text-base-content/60 hover:text-base-content transition-colors';
+    }
+  };
+
+  window.copyExtractedJson = function() {
+    const pre = document.getElementById('extracted_json_pre');
+    const label = document.getElementById('copy_json_label');
+    if (pre) {
+      navigator.clipboard.writeText(pre.innerText).then(() => {
+        if (label) {
+          label.textContent = 'Copied!';
+          setTimeout(() => { label.textContent = 'Copy JSON'; }, 2000);
+        }
+      });
+    }
+  };
+</script>
