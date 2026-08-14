@@ -1,0 +1,260 @@
+# DocuSeal Billing & Balance Top-Up API Documentation
+
+This document explains how to interact with the DocuSeal Billing API to retrieve the current credit balance, check usage statistics, and programmatically top up the balance from external services (e.g., payment gateways like Stripe, LemonSqueezy, PayPal, or internal microservices).
+
+---
+
+## 🔑 Authentication
+
+All requests to the Billing API must include your DocuSeal API Token in the HTTP request headers:
+
+```http
+X-Auth-Token: YOUR_API_TOKEN
+```
+
+> **Where to find your API Token:**  
+> Go to **Settings** $\rightarrow$ **API** (`http://localhost:3000/settings/api`) in your DocuSeal dashboard to copy your `X-Auth-Token`.
+
+---
+
+## 📡 Base URL
+
+```
+http://localhost:3000/api
+```
+*(Or your production host: `https://your-docuseal-domain.com/api`)*
+
+---
+
+## 1. Top Up Balance
+
+Add funds / credits to your DocuSeal account balance.
+
+### **Endpoint**
+`POST /api/billing`
+
+### **Headers**
+| Header | Value | Description |
+| :--- | :--- | :--- |
+| `X-Auth-Token` | `YOUR_API_TOKEN` | Required. Your DocuSeal API authentication token. |
+| `Content-Type` | `application/json` | Required. Must be `application/json`. |
+
+### **Request Body**
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `amount` | `Float` or `Integer` | **Yes** | The amount in USD to add to the account credit balance. Must be greater than `0`. |
+
+#### Example Request Body
+```json
+{
+  "amount": 50.00
+}
+```
+
+---
+
+### **Success Response** (`200 OK`)
+```json
+{
+  "success": true,
+  "message": "Successfully topped up $50.00 USD",
+  "account_id": 1,
+  "amount_added": 50.0,
+  "previous_balance": 10.0,
+  "new_balance": 60.0,
+  "currency": "USD"
+}
+```
+
+---
+
+### **Error Responses**
+
+#### `422 Unprocessable Content` (Invalid Amount)
+```json
+{
+  "error": "Invalid top-up amount. Amount must be greater than 0."
+}
+```
+
+#### `401 Unauthorized` (Invalid or Missing Token)
+```json
+{
+  "error": "Not authenticated"
+}
+```
+
+---
+
+## 2. Get Current Balance & Usage
+
+Retrieve the current credit balance, rate per completed signature, and month/all-time metrics.
+
+### **Endpoint**
+`GET /api/billing`
+
+### **Headers**
+```http
+X-Auth-Token: YOUR_API_TOKEN
+```
+
+### **Success Response** (`200 OK`)
+```json
+{
+  "account_id": 1,
+  "account_name": "My Company",
+  "balance": 60.0,
+  "currency": "USD",
+  "rate_per_signature": 0.2,
+  "total_completed_signatures": 14,
+  "total_spent": 2.8,
+  "this_month_completed_signatures": 5,
+  "this_month_spent": 1.0
+}
+```
+
+---
+
+## 💻 Code Examples
+
+### **1. cURL**
+
+#### Top Up $50.00 USD:
+```bash
+curl -X POST "http://localhost:3000/api/billing" \
+  -H "X-Auth-Token: YOUR_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"amount": 50.0}'
+```
+
+#### Check Balance:
+```bash
+curl -X GET "http://localhost:3000/api/billing" \
+  -H "X-Auth-Token: YOUR_API_TOKEN"
+```
+
+---
+
+### **2. Node.js (Fetch / Axios)**
+
+```javascript
+// Using Node.js 18+ native fetch
+async function topUpDocusealBalance(amount) {
+  const response = await fetch('http://localhost:3000/api/billing', {
+    method: 'POST',
+    headers: {
+      'X-Auth-Token': process.env.DOCUSEAL_API_TOKEN,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ amount: amount })
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Top-up failed');
+  }
+
+  console.log('Top-up successful:', data);
+  return data;
+}
+
+// Example usage:
+// topUpDocusealBalance(50.00);
+```
+
+---
+
+### **3. Python (requests)**
+
+```python
+import os
+import requests
+
+API_URL = "http://localhost:3000/api/billing"
+API_TOKEN = os.getenv("DOCUSEAL_API_TOKEN", "YOUR_API_TOKEN")
+
+def top_up_balance(amount: float):
+    headers = {
+        "X-Auth-Token": API_TOKEN,
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "amount": amount
+    }
+
+    response = requests.post(API_URL, json=payload, headers=headers)
+    if response.status_code == 200:
+        print("Top up succeeded:", response.json())
+        return response.json()
+    else:
+        print(f"Error {response.status_code}:", response.json())
+        return None
+
+# Example usage:
+# top_up_balance(50.00)
+```
+
+---
+
+### **4. PHP (cURL)**
+
+```php
+<?php
+
+function topUpDocusealBalance($amount, $apiToken, $baseUrl = 'http://localhost:3000') {
+    $ch = curl_init("{$baseUrl}/api/billing");
+
+    $payload = json_encode(['amount' => (float)$amount]);
+
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        "X-Auth-Token: {$apiToken}",
+        "Content-Type: application/json"
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    return [
+        'status' => $httpCode,
+        'data' => json_decode($response, true)
+    ];
+}
+
+// Example usage:
+// $result = topUpDocusealBalance(50.00, 'YOUR_API_TOKEN');
+// print_r($result);
+```
+
+---
+
+## 🔄 Stripe / Payment Webhook Integration Pattern
+
+When receiving a successful checkout webhook from Stripe (e.g. `checkout.session.completed`):
+
+```javascript
+// Example Express / Next.js Stripe webhook handler:
+app.post('/webhook/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
+  const event = stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], endpointSecret);
+
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object;
+    const amountPaidUsd = session.amount_total / 100; // Convert cents to dollars
+
+    // Call DocuSeal Billing Top-Up API
+    await fetch('http://localhost:3000/api/billing', {
+      method: 'POST',
+      headers: {
+        'X-Auth-Token': process.env.DOCUSEAL_API_TOKEN,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ amount: amountPaidUsd })
+    });
+  }
+
+  res.json({ received: true });
+});
+```

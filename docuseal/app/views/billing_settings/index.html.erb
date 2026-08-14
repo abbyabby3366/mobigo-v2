@@ -1,0 +1,271 @@
+<div class="flex flex-wrap space-y-4 md:flex-nowrap md:space-y-0 md:space-x-8 px-3 sm:px-6">
+  <%= render 'shared/settings_nav' %>
+  <div class="flex-grow max-w-3xl">
+    <div class="flex flex-col gap-2 md:flex-row md:justify-between md:items-center mb-6">
+      <div>
+        <h1 class="text-3xl md:text-4xl font-bold">
+          <%= t('billing') %>
+        </h1>
+        <p class="text-sm opacity-70 mt-1">
+          Manage your eSignature API credit balance, pay-as-you-go rate, and API transaction history.
+        </p>
+      </div>
+      <div class="badge badge-success badge-lg gap-2 whitespace-nowrap font-medium text-xs sm:text-sm shrink-0 self-start md:self-auto h-auto py-1.5 px-3">
+        <%= svg_icon('circle_check_filled', class: 'w-4 h-4 shrink-0') rescue '' %>
+        <span>eSignature API Active</span>
+      </div>
+    </div>
+
+    <!-- API Credit Balance Card -->
+    <div class="card bg-base-200 border border-base-300 shadow-sm mb-6">
+      <div class="card-body p-6">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <div class="text-xs uppercase tracking-wider font-semibold opacity-60">
+              Current API Credit Balance
+            </div>
+            <div class="text-4xl font-extrabold text-primary mt-1">
+              <%= number_to_currency(@balance, unit: '$') %>
+              <span class="text-sm font-normal text-base-content opacity-60">USD</span>
+            </div>
+            <div class="text-xs opacity-70 mt-1">
+              Deducted automatically at <strong>$0.20 USD</strong> per successfully completed API signature request.
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <modal-button data-target="topup_modal" class="inline-flex">
+              <button type="button" class="base-button !flex-nowrap flex-row items-center justify-center space-x-2 whitespace-nowrap !px-5">
+                <%= svg_icon('credit_card', class: 'w-5 h-5 flex-shrink-0 inline-block') %>
+                <span class="whitespace-nowrap">Top Up Balance</span>
+              </button>
+            </modal-button>
+          </div>
+        </div>
+
+        <div class="divider my-4"></div>
+
+        <!-- Period Tabs & Header -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+          <div class="text-xs uppercase tracking-wider font-semibold opacity-60">
+            API Usage Summary
+          </div>
+          <% usage_tab_options = [['This Month', 'usage_month_content'], ['Total', 'usage_total_content']] %>
+          <toggle-visible data-element-ids="<%= usage_tab_options.map(&:last).to_json %>" class="inline-block">
+            <div class="join">
+              <% usage_tab_options.each_with_index do |(label, value), index| %>
+                <span>
+                  <%= radio_button_tag 'usage_period', value, index.zero?, class: 'peer hidden', data: { action: 'change:toggle-visible#trigger' } %>
+                  <label for="usage_period_<%= value %>" class="<%= '!rounded-s-full' if index.zero? %> <%= '!rounded-e-full' if index == 1 %> btn btn-sm join-item w-28 peer-checked:btn-active normal-case cursor-pointer">
+                    <%= label %>
+                  </label>
+                </span>
+              <% end %>
+            </div>
+          </toggle-visible>
+        </div>
+
+        <!-- Metrics Grid (This Month) -->
+        <div id="usage_month_content" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="p-3 bg-base-100 rounded-lg border border-base-300">
+            <div class="text-xs opacity-60 font-medium">API Rate / Signature</div>
+            <div class="text-xl font-bold mt-0.5 text-base-content">
+              $<%= sprintf('%.2f', @price_per_signature) %> <span class="text-xs font-normal opacity-60">USD</span>
+            </div>
+            <div class="text-[11px] opacity-60 mt-0.5">Per completed API eSign</div>
+          </div>
+
+          <div class="p-3 bg-base-100 rounded-lg border border-base-300">
+            <div class="text-xs opacity-60 font-medium">Completed API Signatures</div>
+            <div class="text-xl font-bold mt-0.5 text-base-content">
+              <%= number_with_delimiter(@month_completed) %>
+            </div>
+          </div>
+
+          <div class="p-3 bg-base-100 rounded-lg border border-base-300">
+            <div class="text-xs opacity-60 font-medium">This Month API Usage</div>
+            <div class="text-xl font-bold mt-0.5 text-base-content">
+              <%= number_to_currency(@month_spent, unit: '$') %>
+            </div>
+            <div class="text-[11px] opacity-60 mt-0.5"><%= Time.current.strftime('%B') %> API credits consumed</div>
+          </div>
+        </div>
+
+        <!-- Metrics Grid (Total) -->
+        <div id="usage_total_content" class="grid grid-cols-1 sm:grid-cols-3 gap-4 hidden">
+          <div class="p-3 bg-base-100 rounded-lg border border-base-300">
+            <div class="text-xs opacity-60 font-medium">API Rate / Signature</div>
+            <div class="text-xl font-bold mt-0.5 text-base-content">
+              $<%= sprintf('%.2f', @price_per_signature) %> <span class="text-xs font-normal opacity-60">USD</span>
+            </div>
+            <div class="text-[11px] opacity-60 mt-0.5">Per completed API eSign</div>
+          </div>
+
+          <div class="p-3 bg-base-100 rounded-lg border border-base-300">
+            <div class="text-xs opacity-60 font-medium">Completed API Signatures</div>
+            <div class="text-xl font-bold mt-0.5 text-base-content">
+              <%= number_with_delimiter(@total_completed) %>
+            </div>
+          </div>
+
+          <div class="p-3 bg-base-100 rounded-lg border border-base-300">
+            <div class="text-xs opacity-60 font-medium">Total API Usage</div>
+            <div class="text-xl font-bold mt-0.5 text-base-content">
+              <%= number_to_currency(@total_spent, unit: '$') %>
+            </div>
+            <div class="text-[11px] opacity-60 mt-0.5">Total API credits consumed</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Signature Charges -->
+    <div class="card bg-base-200 border border-base-300 shadow-sm mb-6">
+      <div class="card-body p-6">
+        <h2 class="text-xl font-bold mb-4">Recent API Usage & Billing Activity</h2>
+
+        <% if @recent_transactions.present? %>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra w-full text-sm">
+              <thead>
+                <tr class="text-xs uppercase opacity-60">
+                  <th>Date</th>
+                  <th>Document / Submitter</th>
+                  <th>Type</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% @recent_transactions.each do |tx| %>
+                  <tr>
+                    <td class="font-mono text-xs opacity-70 whitespace-nowrap">
+                      <%= tx.completed_at ? tx.completed_at.strftime('%b %d, %Y %H:%M') : tx.created_at.strftime('%b %d, %Y %H:%M') %>
+                    </td>
+                    <td>
+                      <div class="font-medium text-base-content">
+                        <%= tx.submission&.name.presence || "Submission ##{tx.submission_id}" %>
+                      </div>
+                      <div class="text-xs opacity-60">
+                        <%= tx.submitter&.email || tx.submitter&.name || "Submitter ##{tx.submitter_id}" %>
+                      </div>
+                    </td>
+                    <td>
+                      <span class="badge badge-sm badge-ghost">API Signature</span>
+                    </td>
+                    <td class="font-mono font-medium text-error whitespace-nowrap">
+                      -$<%= sprintf('%.2f', Billing::PRICE_PER_SIGNATURE) %> USD
+                    </td>
+                    <td>
+                      <span class="badge badge-sm badge-success gap-1">
+                        <%= svg_icon('check', class: 'w-3 h-3') %> Paid
+                      </span>
+                    </td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        <% else %>
+          <div class="text-center py-8 bg-base-100 rounded-lg border border-dashed border-base-300">
+            <%= svg_icon('file_text', class: 'w-10 h-10 opacity-30 mx-auto mb-2') %>
+            <p class="font-medium opacity-80">No API signature charges yet</p>
+          </div>
+        <% end %>
+      </div>
+    </div>
+
+    <!-- Pricing & Rate Breakdown (Accordion below Recent Activity) -->
+    <div class="collapse collapse-arrow bg-base-200 border border-base-300 shadow-sm rounded-2xl">
+      <input type="checkbox" />
+      <div class="collapse-title flex items-center justify-between py-4 px-6">
+        <div>
+          <h2 class="text-lg md:text-xl font-bold">eSignature API Pricing</h2>
+          <p class="text-xs opacity-70 mt-0.5">Simple, transparent pay-as-you-go pricing for all document workflows.</p>
+        </div>
+        <div class="text-right mr-6 shrink-0">
+          <span class="text-xl md:text-2xl font-extrabold text-primary">$0.20</span>
+          <span class="text-xs opacity-70 block sm:inline">/ completed signature</span>
+        </div>
+      </div>
+
+      <div class="collapse-content px-6 pb-6 pt-0">
+        <div class="divider mt-0 mb-4"></div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div class="flex items-start gap-2.5 text-sm">
+            <%= svg_icon('circle_check', class: 'w-5 h-5 text-success shrink-0 mt-0.5') %>
+            <span>Pay <strong>$0.20 USD</strong> only on successful completion</span>
+          </div>
+          <div class="flex items-start gap-2.5 text-sm">
+            <%= svg_icon('circle_check', class: 'w-5 h-5 text-success shrink-0 mt-0.5') %>
+            <span>Unlimited API keys, Webhooks & integrations</span>
+          </div>
+          <div class="flex items-start gap-2.5 text-sm">
+            <%= svg_icon('circle_check', class: 'w-5 h-5 text-success shrink-0 mt-0.5') %>
+            <span>Embedded Signing (iFrame / JS / React SDK)</span>
+          </div>
+          <div class="flex items-start gap-2.5 text-sm">
+            <%= svg_icon('circle_check', class: 'w-5 h-5 text-success shrink-0 mt-0.5') %>
+            <span>Audit trail certificate & cryptographic proof</span>
+          </div>
+          <div class="flex items-start gap-2.5 text-sm">
+            <%= svg_icon('circle_check', class: 'w-5 h-5 text-success shrink-0 mt-0.5') %>
+            <span>Automated email & SMS signer notifications</span>
+          </div>
+          <div class="flex items-start gap-2.5 text-sm">
+            <%= svg_icon('circle_check', class: 'w-5 h-5 text-success shrink-0 mt-0.5') %>
+            <span>Secure PDF storage & tamper-evident sealing</span>
+          </div>
+        </div>
+
+        <div class="mt-4 pt-4 border-t border-base-300 flex justify-end text-xs opacity-70">
+          <a href="https://www.docuseal.com/pricing" target="_blank" rel="noopener noreferrer" class="link flex items-center gap-1 font-medium hover:opacity-100">
+            <span>docuseal.com/pricing</span>
+            <%= svg_icon('external_link', class: 'w-3.5 h-3.5') %>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="w-0 md:w-52"></div>
+</div>
+
+<!-- Top Up Modal (Dialog) -->
+<dialog id="topup_modal" class="modal">
+  <div class="modal-box max-w-md">
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+    </form>
+    <h3 class="font-bold text-lg mb-2">Top Up Balance</h3>
+    <p class="text-sm opacity-70 mb-4">
+      Add credits to your account balance for eSignature API requests ($0.20 USD per completed API signature).
+    </p>
+
+    <div class="space-y-4">
+      <div>
+        <label class="label text-xs font-semibold uppercase opacity-70 pb-1">Select Amount</label>
+        <div class="grid grid-cols-3 gap-2">
+          <button type="button" class="btn btn-outline btn-primary">$20 USD</button>
+          <button type="button" class="btn btn-outline btn-primary">$50 USD</button>
+          <button type="button" class="btn btn-outline btn-primary">$100 USD</button>
+        </div>
+      </div>
+
+      <div class="p-3 bg-base-200 rounded-lg text-xs opacity-80 flex items-center gap-2">
+        <%= svg_icon('info_circle', class: 'w-4 h-4 shrink-0') %>
+        <span>Payment gateway integration will be connected in the next update. External services can top up via the <code>POST /api/billing</code> endpoint.</span>
+      </div>
+    </div>
+
+    <div class="modal-action mt-6">
+      <form method="dialog">
+        <button class="base-button">Close</button>
+      </form>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
+
+

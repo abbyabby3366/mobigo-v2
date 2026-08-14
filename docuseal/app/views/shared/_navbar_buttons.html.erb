@@ -1,0 +1,4 @@
+<% if signed_in? && current_user != true_user %>
+  <%= render 'shared/test_alert' %>
+<% end %>
+

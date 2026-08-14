@@ -1,0 +1,31 @@
+# Environment and Secrets
+.env
+.env.*
+!.env.example
+*.key
+
+# Docuseal ignored patterns
+.bundle
+db/*.sqlite3
+db/*.sqlite3-*
+log/*
+tmp/*
+!log/.keep
+!tmp/.keep
+storage/*
+!storage/.keep
+node_modules/
+yarn-error.log
+yarn-debug.log*
+.yarn-integrity
+.DS_Store
+coverage/
+attachments/
+dump.rdb
+*.onnx
+
+# OS / Editor files
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
