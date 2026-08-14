@@ -1,4 +1,6 @@
 <% fields = template.fields.to_a %>
+<% signatures = fields.select { |f| f['type'] == 'signature' } %>
+<% data_fields = fields.reject { |f| f['type'] == 'signature' } %>
 <% submitters = template.submitters.to_a %>
 <%
   translations = {
@@ -30,16 +32,20 @@
 %>
 
 <div class="mt-3 bg-base-200/80 rounded-2xl border border-base-300 overflow-hidden shadow-2xs">
-  <details open class="group">
+  <details class="group">
     <!-- Accordion Summary / Header -->
+
     <summary class="flex items-center justify-between p-3.5 cursor-pointer select-none bg-base-200 hover:bg-base-300/60 transition-colors list-none">
-      <div class="flex items-center space-x-2">
-        <span class="font-bold text-xs uppercase tracking-wider text-base-content/80">Fields Required for this Template</span>
-        <span class="badge badge-sm badge-neutral font-bold"><%= fields.size %></span>
+      <div class="flex items-center space-x-2 flex-wrap gap-y-1">
+        <span class="font-bold text-xs uppercase tracking-wider text-base-content/80">Template Fields</span>
+        <span class="badge badge-sm badge-neutral font-bold"><%= data_fields.size %> Data <%= 'Field'.pluralize(data_fields.size) %></span>
+        <% if signatures.present? %>
+          <span class="badge badge-sm badge-outline border-neutral-400 text-neutral-800 font-semibold"><%= signatures.size %> <%= 'Signature'.pluralize(signatures.size) %></span>
+        <% end %>
       </div>
-      <div class="flex items-center space-x-2">
-        <span class="text-[11px] text-base-content/50 group-open:hidden">Click to expand</span>
-        <span class="text-[11px] text-base-content/50 hidden group-open:inline">Click to collapse</span>
+      <div class="flex items-center space-x-2 flex-shrink-0">
+        <span class="text-[11px] text-base-content/50 group-open:hidden">Expand</span>
+        <span class="text-[11px] text-base-content/50 hidden group-open:inline">Collapse</span>
         <div class="p-1 rounded-md bg-base-100/80 text-base-content/70 group-open:rotate-180 transition-transform duration-200">
           <%= svg_icon('chevron_down', class: 'w-4 h-4 stroke-2') %>
         </div>
@@ -47,10 +53,10 @@
     </summary>
 
     <!-- Accordion Body -->
-    <div class="p-3.5 pt-1 border-t border-base-300 space-y-2">
+    <div class="p-3.5 pt-1 border-t border-base-300 space-y-3">
       <div class="flex items-center justify-between py-1 text-[11px] text-base-content/60">
-        <span>AI will extract and map all matching fields automatically</span>
-        <span class="font-mono text-[10px]"><%= fields.size %> items</span>
+        <span>AI populates all <%= data_fields.size %> data fields automatically</span>
+        <span class="font-mono text-[10px]"><%= data_fields.size %> text/date + <%= signatures.size %> signature</span>
       </div>
 
       <% if fields.blank? %>
@@ -59,30 +65,70 @@
           <span>This template currently has no form fields defined.</span>
         </div>
       <% else %>
-        <div class="max-h-80 overflow-y-auto pr-1 space-y-1.5 scrollbar-thin">
-          <% fields.each_with_index do |f, idx| %>
-            <% sub = submitters.find { |s| s['uuid'] == f['submitter_uuid'] } %>
-            <% en_trans = translations[f['name']] %>
-            <div class="flex items-center justify-between text-xs py-2 px-3 bg-base-100 rounded-xl border border-base-200/80 hover:border-neutral-900 transition-all shadow-2xs">
-              <div class="flex items-center space-x-1.5 min-w-0 flex-wrap">
-                <span class="text-[11px] font-mono text-base-content/40 w-4 text-right"><%= idx + 1 %>.</span>
-                <span class="font-semibold text-base-content truncate"><%= f['name'] %></span>
-                <% if en_trans.present? %>
-                  <span class="text-[11px] text-base-content/50 font-normal italic">(<%= en_trans %>)</span>
-                <% end %>
-                <% if f['required'] %>
-                  <span class="text-error font-bold text-sm leading-none" title="Required field">*</span>
-                <% end %>
+        <!-- Section 1: Data Fields -->
+        <div class="space-y-1.5">
+          <div class="text-[11px] font-bold uppercase tracking-wider text-base-content/70 flex items-center justify-between">
+            <span>Data Fields to Populate (<%= data_fields.size %>)</span>
+          </div>
+
+          <div class="max-h-72 overflow-y-auto pr-1 space-y-1.5 scrollbar-thin">
+            <% data_fields.each_with_index do |f, idx| %>
+              <% sub = submitters.find { |s| s['uuid'] == f['submitter_uuid'] } %>
+              <% en_trans = translations[f['name']] %>
+              <div class="flex items-center justify-between text-xs py-2 px-3 bg-base-100 rounded-xl border border-base-200/80 hover:border-neutral-900 transition-all shadow-2xs">
+                <div class="flex items-center space-x-1.5 min-w-0 flex-wrap">
+                  <span class="text-[11px] font-mono text-base-content/40 w-4 text-right"><%= idx + 1 %>.</span>
+                  <span class="font-semibold text-base-content truncate"><%= f['name'] %></span>
+                  <% if en_trans.present? %>
+                    <span class="text-[11px] text-base-content/50 font-normal italic">(<%= en_trans %>)</span>
+                  <% end %>
+                  <% if f['required'] %>
+                    <span class="text-error font-bold text-sm leading-none" title="Required field">*</span>
+                  <% end %>
+                </div>
+                <div class="flex items-center space-x-1.5 flex-shrink-0 ml-2">
+                  <span class="badge badge-xs badge-ghost text-[10px] uppercase font-mono"><%= f['type'] || 'text' %></span>
+                  <% if sub %>
+                    <span class="badge badge-xs badge-outline text-[10px] max-w-[120px] truncate"><%= sub['name'] %></span>
+                  <% end %>
+                </div>
               </div>
-              <div class="flex items-center space-x-1.5 flex-shrink-0 ml-2">
-                <span class="badge badge-xs badge-ghost text-[10px] uppercase font-mono"><%= f['type'] || 'text' %></span>
-                <% if sub %>
-                  <span class="badge badge-xs badge-outline text-[10px] max-w-[120px] truncate"><%= sub['name'] %></span>
-                <% end %>
-              </div>
-            </div>
-          <% end %>
+            <% end %>
+          </div>
         </div>
+
+        <!-- Section 2: Signature Fields -->
+        <% if signatures.present? %>
+          <div class="pt-2 border-t border-base-300 space-y-1.5">
+            <div class="text-[11px] font-bold uppercase tracking-wider text-base-content/70 flex items-center justify-between">
+              <span>Signature Fields (<%= signatures.size %>)</span>
+            </div>
+
+            <div class="space-y-1.5">
+              <% signatures.each_with_index do |f, idx| %>
+                <% sub = submitters.find { |s| s['uuid'] == f['submitter_uuid'] } %>
+                <% en_trans = translations[f['name']] %>
+                <div class="flex items-center justify-between text-xs py-2 px-3 bg-base-100 rounded-xl border border-dashed border-neutral-400 transition-all shadow-2xs">
+                  <div class="flex items-center space-x-1.5 min-w-0 flex-wrap">
+                    <span class="font-semibold text-base-content truncate"><%= f['name'] %></span>
+                    <% if en_trans.present? %>
+                      <span class="text-[11px] text-base-content/50 font-normal italic">(<%= en_trans %>)</span>
+                    <% end %>
+                    <% if f['required'] %>
+                      <span class="text-error font-bold text-sm leading-none" title="Required field">*</span>
+                    <% end %>
+                  </div>
+                  <div class="flex items-center space-x-1.5 flex-shrink-0 ml-2">
+                    <span class="badge badge-xs badge-neutral text-[10px] uppercase font-mono">SIGNATURE</span>
+                    <% if sub %>
+                      <span class="badge badge-xs badge-outline text-[10px] max-w-[120px] truncate"><%= sub['name'] %></span>
+                    <% end %>
+                  </div>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
       <% end %>
     </div>
   </details>

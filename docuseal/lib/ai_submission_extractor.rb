@@ -293,6 +293,39 @@ module AiSubmissionExtractor
     JSON.parse(res.body)
   end
 
+  FIELD_TO_ENGLISH_KEY = {
+    'Nombor Pesanan' => 'order_number',
+    'Nama Penerima ("Pihak B")' => 'recipient_name',
+    'Nombor Telefon ("Pihak B")' => 'recipient_phone',
+    'Alamat Penghantaran ("Pihak B")' => 'delivery_address',
+    'E-mel ("Pihak B")' => 'recipient_email',
+    'Nama Produk' => 'product_name',
+    'Nombor IMEI Telefon' => 'imei_number',
+    'Siri Telefon' => 'serial_number',
+    'Nombor IMEI Telefon/ Siri Telefon' => 'imei_and_serial',
+    'Kuantiti Peralatan' => 'quantity',
+    'Tarikh mula sewaan' => 'rental_start_date',
+    'Tarikh akhir sewaan' => 'rental_end_date',
+    'Jumlah Tempoh Sewaan' => 'rental_duration',
+    'Harga Sewa Sebulan' => 'monthly_rent',
+    'Jumlah Sewa' => 'total_rent',
+    'Deposit Produk' => 'product_deposit',
+    'Harga Pasaran/Harga Produk' => 'retail_price',
+    'Tandatangan Penerima ("Pihak B")' => 'recipient_signature',
+    'Nama' => 'signer_name',
+    'No. Kad Pengenalan' => 'ic_number',
+    'Tarikh Penerimaan' => 'receipt_date',
+    'Full Name' => 'full_name',
+    'Phone Number' => 'phone_number',
+    'Device Model' => 'device_model',
+    'Rental Start Date' => 'rental_start_date',
+    'Terms Accepted' => 'terms_accepted'
+  }.freeze
+
+  def english_key_for(field_name)
+    FIELD_TO_ENGLISH_KEY[field_name] || field_name.to_s.parameterize.underscore
+  end
+
   def parse_ai_response(response_json, template)
     content = response_json.dig('choices', 0, 'message', 'content') ||
               response_json.dig('choices', 0, 'delta', 'content') ||
@@ -317,7 +350,42 @@ module AiSubmissionExtractor
     template_submitters = template.submitters.to_a
     template_fields = template.fields.to_a
 
-    fields_hash = parsed_data['fields'] || {}
+    raw_fields = parsed_data['fields'] || {}
+
+    # Build bidirectional lookup (Malay field name <-> English key)
+    fields_hash = {}
+    english_fields = {}
+
+    template_fields.each do |f|
+      f_name = f['name']
+      en_key = english_key_for(f_name)
+
+      # Check if raw_fields has either Malay name or English key
+      val = raw_fields[f_name] || raw_fields[en_key] || raw_fields[en_key.camelize] || raw_fields[f_name.parameterize.underscore]
+
+      if val.blank? && parsed_data['submitters'].present?
+        parsed_data['submitters'].each do |sub_d|
+          s_vals = sub_d['values'] || {}
+          v = s_vals[f_name] || s_vals[en_key] || s_vals[en_key.camelize]
+          if v.present?
+            val = v
+            break
+          end
+        end
+      end
+
+      if val.present?
+        fields_hash[f_name] = val
+        english_fields[en_key] = val
+      end
+    end
+
+    # Also capture any extra extracted fields
+    raw_fields.each do |k, v|
+      en_k = english_key_for(k)
+      english_fields[en_k] ||= v
+      fields_hash[k] ||= v
+    end
 
     normalized_submitters = template_submitters.map do |ts|
       s_data = submitters_map[ts['uuid']] || {}
@@ -326,29 +394,54 @@ module AiSubmissionExtractor
       # Assign any field values that belong to this submitter
       template_fields.select { |f| f['submitter_uuid'] == ts['uuid'] }.each do |f|
         f_name = f['name']
+        en_key = english_key_for(f_name)
         if fields_hash.key?(f_name) && !s_values.key?(f_name)
           s_values[f_name] = fields_hash[f_name]
         elsif s_values.key?(f_name) && !fields_hash.key?(f_name)
           fields_hash[f_name] = s_values[f_name]
+          english_fields[en_key] = s_values[f_name]
+        elsif s_values.key?(en_key) && !s_values.key?(f_name)
+          s_values[f_name] = s_values[en_key]
+          fields_hash[f_name] = s_values[en_key]
+          english_fields[en_key] = s_values[en_key]
         end
       end
+
+      # Extract email, name, phone from fields if not in submitter root
+      sub_email = s_data['email'].presence || fields_hash['E-mel ("Pihak B")'].presence || english_fields['recipient_email'].presence || ''
+      sub_name = s_data['name'].presence || fields_hash['Nama Penerima ("Pihak B")'].presence || english_fields['recipient_name'].presence || ''
+      sub_phone = s_data['phone'].presence || fields_hash['Nombor Telefon ("Pihak B")'].presence || english_fields['recipient_phone'].presence || ''
 
       {
         'uuid' => ts['uuid'],
         'role' => ts['name'],
-        'name' => s_data['name'].to_s,
-        'email' => s_data['email'].to_s,
-        'phone' => s_data['phone'].to_s,
+        'name' => sub_name,
+        'email' => sub_email,
+        'phone' => sub_phone,
         'values' => s_values
       }
     end
+
+    first_sub = normalized_submitters.first || {}
+
+    # Clean English JSON Output
+    english_output_json = {
+      'summary' => parsed_data['summary'] || 'Data extracted successfully.',
+      'recipient' => {
+        'name' => first_sub['name'].to_s,
+        'email' => first_sub['email'].to_s,
+        'phone' => first_sub['phone'].to_s
+      },
+      'fields' => english_fields
+    }
 
     {
       success: true,
       summary: parsed_data['summary'] || 'Data extracted successfully.',
       submitters: normalized_submitters,
       fields: fields_hash,
-      raw_json: parsed_data
+      english_fields: english_fields,
+      raw_json: english_output_json
     }
   rescue StandardError => e
     Rails.logger.error("Failed to parse AI response: #{e.message}\nRaw content: #{content}")
@@ -358,5 +451,6 @@ module AiSubmissionExtractor
       raw_content: content
     }
   end
+
 
 end

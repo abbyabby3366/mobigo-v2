@@ -6,12 +6,27 @@ class AiSubmissionsController < ApplicationController
   before_action -> { authorize!(:create, Submission) }
   before_action :load_template, only: %i[template_fields extract create]
 
-
   def new
     @templates = (current_account ? current_account.templates : Template).active.order(name: :asc)
 
     @template = @templates.find_by(id: params[:template_id]) || @templates.first
   end
+
+  def set_csp
+    request.content_security_policy = current_content_security_policy.tap do |policy|
+      policy.default_src :self
+      policy.script_src :self, :unsafe_inline
+      policy.style_src :self, :unsafe_inline
+      policy.img_src :self, :https, :http, :blob, :data
+      policy.font_src :self, :https, :http, :blob, :data
+      policy.manifest_src :self
+      policy.media_src :self
+      policy.frame_src :self
+      policy.worker_src :self, :blob
+      policy.connect_src :self
+    end
+  end
+
 
 
   def template_fields
@@ -42,12 +57,14 @@ class AiSubmissionsController < ApplicationController
         format.html do
           render partial: 'extracted_fields', locals: {
             template: @template,
+            template_fields: @template.fields.to_a,
             extracted_data: result,
             submitters: result[:submitters],
             fields: result[:fields],
             summary: result[:summary],
             raw_json: result[:raw_json]
           }
+
         end
       end
     else

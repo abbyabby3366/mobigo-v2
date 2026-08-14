@@ -1,79 +1,5 @@
-<% submitters = extracted_data[:submitters] || [] %>
-<% fields = extracted_data[:fields] || {} %>
-<% raw_json = extracted_data[:raw_json] || {} %>
-<% template_fields = template.fields.to_a %>
-
-<div class="mt-4 space-y-4">
-  <!-- AI Extraction Summary Banner -->
-  <div class="p-3 bg-success/10 border border-success/30 rounded-xl text-success flex items-start space-x-2.5">
-    <div class="mt-0.5"><%= svg_icon('sparkles', class: 'w-5 h-5 stroke-2 flex-shrink-0') %></div>
-    <div class="text-xs">
-      <div class="font-semibold text-sm">Data Extracted Successfully</div>
-      <div class="text-base-content/80 mt-0.5"><%= extracted_data[:summary] || 'Gemini 3.6 Flash analyzed your input files and populated the form fields.' %></div>
-    </div>
-  </div>
-
-  <!-- Tab selector: Form View vs JSON Output View -->
-  <div class="flex border-b border-base-300">
-    <button type="button" id="tab_btn_form" onclick="switchAiTab('form')" class="py-2 px-4 text-xs font-semibold border-b-2 border-primary text-primary transition-colors">
-      Form Fields (Review & Edit)
-    </button>
-    <button type="button" id="tab_btn_json" onclick="switchAiTab('json')" class="py-2 px-4 text-xs font-semibold border-b-2 border-transparent text-base-content/60 hover:text-base-content transition-colors flex items-center space-x-1">
-      <span>JSON Output</span>
-      <span class="badge badge-xs badge-neutral font-mono">JSON</span>
-    </button>
-  </div>
-
-  <!-- Form Fields Tab -->
-  <div id="ai_tab_form" class="space-y-4">
-    <%= form_with url: ai_submissions_path, method: :post, id: 'ai_create_submission_form', local: true, class: 'space-y-4' do |f| %>
-      <%= hidden_field_tag :template_id, template.id %>
-
-      <% submitters.each_with_index do |sub, idx| %>
-        <% sub_fields = template_fields.select { |tf| tf['submitter_uuid'] == sub['uuid'] } %>
-        <div class="card bg-base-200/50 border border-base-300 rounded-xl p-4 space-y-3">
-          <div class="flex items-center justify-between border-b border-base-300 pb-2">
-            <div class="flex items-center space-x-2">
-              <span class="badge badge-primary font-semibold text-xs"><%= sub['role'] || "Party #{idx + 1}" %></span>
-              <span class="text-xs text-base-content/60 font-mono"><%= sub['uuid'].to_s[0..7] %></span>
-            </div>
-            <span class="text-xs text-base-content/60"><%= sub_fields.size %> field(s)</span>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs font-medium text-base-content/70 mb-1">Recipient Name</label>
-              <%= text_field_tag "submission[submitters][#{idx}][name]", sub['name'], class: 'input input-sm input-bordered w-full text-xs rounded-lg', placeholder: 'e.g. John Doe' %>
-            </div>
-            <div>
-              <div class="flex items-center justify-between mb-1">
-                <label class="block text-xs font-semibold text-base-content/90 flex items-center space-x-1">
-                  <%= svg_icon('mail', class: 'w-3.5 h-3.5 text-primary') %>
-                  <span>Recipient Email (Send Document To)</span>
-                </label>
-                <span class="badge badge-xs badge-primary font-mono text-[10px]">Destination</span>
-              </div>
-              <%= email_field_tag "submission[submitters][#{idx}][email]", sub['email'], class: 'input input-sm input-bordered border-primary/50 w-full text-xs rounded-lg font-medium', placeholder: 'e.g. john@example.com', required: true %>
-            </div>
-          </div>
-
-
-          <div>
-            <label class="block text-xs font-medium text-base-content/70 mb-1">Phone (Optional)</label>
-            <%= telephone_field_tag "submission[submitters][#{idx}][phone]", sub['phone'], class: 'input input-sm input-bordered w-full text-xs rounded-lg', placeholder: 'e.g. +1234567890' %>
-          </div>
-
-          <%= hidden_field_tag "submission[submitters][#{idx}][uuid]", sub['uuid'] %>
-
-          <!-- Pre-filled Form Values for this Submitter -->
-          <% if sub_fields.present? %>
-            <div class="pt-2 border-t border-base-300 space-y-2">
-              <div class="text-xs font-semibold text-base-content/70 uppercase tracking-wider">Extracted Field Values</div>
-              <div class="grid grid-cols-1 gap-2.5">
-                <% sub_fields.each do |tf| %>
-                  <% val = (sub['values'] || {})[tf['name']] || fields[tf['name']] || '' %>
-                  <div>
 <%
+  template_fields = template.fields.to_a
   translations = {
     'Nombor Pesanan' => 'Order Number',
     'Nama Penerima ("Pihak B")' => 'Recipient Name',
@@ -98,46 +24,159 @@
     'Tarikh Penerimaan' => 'Receipt Date'
   }
 %>
-                    <div class="flex items-center justify-between mb-1">
-                      <label class="text-xs font-semibold text-base-content truncate flex items-center space-x-1.5">
-                        <span><%= tf['name'] %></span>
-                        <% en_trans = translations[tf['name']] %>
-                        <% if en_trans.present? %>
-                          <span class="text-[11px] text-base-content/50 font-normal italic">(<%= en_trans %>)</span>
-                        <% end %>
-                        <% if tf['required'] %><span class="text-error font-bold">*</span><% end %>
-                      </label>
-                      <span class="text-[10px] text-base-content/50 uppercase font-mono"><%= tf['type'] %></span>
-                    </div>
 
 
-                    <% if tf['type'] == 'checkbox' %>
-                      <label class="cursor-pointer label justify-start gap-2 py-1">
-                        <%= check_box_tag "submission[submitters][#{idx}][values][#{tf['name']}]", 'true', [true, 'true', '1', 1, 'yes'].include?(val), class: 'checkbox checkbox-sm checkbox-primary rounded' %>
-                        <span class="label-text text-xs text-base-content/80">Checked / Selected</span>
-                      </label>
-                    <% elsif tf['type'] == 'date' %>
-                      <%= date_field_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, class: 'input input-sm input-bordered w-full text-xs rounded-lg' %>
-                    <% elsif tf['type'] == 'textarea' %>
-                      <%= text_area_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, rows: 2, class: 'textarea textarea-sm textarea-bordered w-full text-xs rounded-lg' %>
-                    <% else %>
-                      <%= text_field_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, class: 'input input-sm input-bordered w-full text-xs rounded-lg', placeholder: "Value for #{tf['name']}" %>
-                    <% end %>
-                  </div>
-                <% end %>
+<div class="space-y-6">
+  <!-- AI Extraction Overview Banner -->
+  <div class="alert bg-base-100 border border-base-300 rounded-2xl p-4 shadow-sm flex items-start justify-between">
+    <div class="flex items-start space-x-3">
+      <div class="p-2 bg-neutral-900 text-yellow-400 rounded-xl shadow-xs flex-shrink-0">
+        <%= svg_icon('sparkles', class: 'w-5 h-5 stroke-2') %>
+      </div>
+      <div>
+        <div class="text-sm font-bold text-base-content">Data Extracted Successfully by Gemini 3.6 Flash</div>
+        <p class="text-xs text-base-content/70 mt-0.5"><%= summary.presence || 'All fields and recipient details have been automatically populated from your documents and text notes.' %></p>
+      </div>
+    </div>
+    <span class="badge badge-neutral font-mono text-xs py-2.5 px-3 flex-shrink-0">AI Verified</span>
+  </div>
+
+  <!-- Tab selector: Form View vs JSON Output View -->
+  <div class="flex border-b border-base-300">
+    <button type="button" id="tab_btn_form" data-action="switch-tab-form" class="py-2.5 px-4 text-xs font-bold border-b-2 border-neutral-900 text-neutral-900 transition-colors cursor-pointer">
+      Form Fields (Review & Edit)
+    </button>
+    <button type="button" id="tab_btn_json" data-action="switch-tab-json" class="py-2.5 px-4 text-xs font-semibold border-b-2 border-transparent text-base-content/60 hover:text-base-content transition-colors flex items-center space-x-1 cursor-pointer">
+      <span>JSON Output</span>
+      <span class="badge badge-xs badge-neutral font-mono">JSON</span>
+    </button>
+  </div>
+
+
+  <!-- Form Fields Tab -->
+  <div id="ai_tab_form" class="space-y-6">
+    <%= form_with url: ai_submissions_path, method: :post, id: 'ai_create_submission_form', local: true, class: 'space-y-6' do |f| %>
+      <%= hidden_field_tag :template_id, template.id %>
+
+      <% submitters.each_with_index do |sub, idx| %>
+        <% sub_fields = template_fields.select { |tf| tf['submitter_uuid'] == sub['uuid'] } %>
+
+        <!-- SECTION 1: Recipient Information (Extracted Email & Contact) -->
+        <div class="card bg-base-100 border border-base-300 rounded-2xl p-5 shadow-sm space-y-4">
+          <div class="flex items-center justify-between pb-3 border-b border-base-200">
+            <div class="flex items-center space-x-2">
+              <div class="p-1.5 bg-neutral-900 text-white rounded-lg">
+                <%= svg_icon('mail', class: 'w-4 h-4') %>
+              </div>
+              <div>
+                <h3 class="text-xs font-bold uppercase tracking-wider text-base-content/90">
+                  1. Recipient Information & Delivery Email
+                </h3>
+                <p class="text-[11px] text-base-content/60">Auto-extracted from your notes & documents (where document signature link will be sent)</p>
               </div>
             </div>
-          <% end %>
+            <span class="badge badge-neutral text-xs font-semibold"><%= sub['role'] || "Party #{idx + 1}" %></span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- Recipient Email -->
+            <div class="md:col-span-1">
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-xs font-bold text-base-content/90">
+                  Recipient Email (Auto-extracted)
+                </label>
+                <span class="badge badge-xs badge-neutral font-mono text-[9px]">Destination</span>
+              </div>
+              <%= email_field_tag "submission[submitters][#{idx}][email]", sub['email'], class: 'input input-sm input-bordered font-medium w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100', placeholder: 'Enter or confirm email address', required: true %>
+            </div>
+
+            <!-- Recipient Name -->
+            <div class="md:col-span-1">
+              <label class="block text-xs font-bold text-base-content/90 mb-1">
+                Recipient Name (Auto-extracted)
+              </label>
+              <%= text_field_tag "submission[submitters][#{idx}][name]", sub['name'], class: 'input input-sm input-bordered font-medium w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100', placeholder: 'Enter or confirm recipient name' %>
+            </div>
+
+            <!-- Recipient Phone -->
+            <div class="md:col-span-1">
+              <label class="block text-xs font-bold text-base-content/90 mb-1">
+                Phone Number (Auto-extracted)
+              </label>
+              <%= telephone_field_tag "submission[submitters][#{idx}][phone]", sub['phone'], class: 'input input-sm input-bordered font-medium w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100', placeholder: 'Enter or confirm phone number' %>
+            </div>
+          </div>
+
+
+          <%= hidden_field_tag "submission[submitters][#{idx}][uuid]", sub['uuid'] %>
         </div>
+
+        <!-- SECTION 2: Agreement Document Field Values -->
+        <% if sub_fields.present? %>
+          <% sub_sig_count = sub_fields.count { |f| f['type'] == 'signature' } %>
+          <% sub_data_count = sub_fields.size - sub_sig_count %>
+          <div class="card bg-base-100 border border-base-300 rounded-2xl p-5 shadow-sm space-y-4">
+            <div class="flex items-center justify-between pb-3 border-b border-base-200">
+              <div>
+                <h3 class="text-xs font-bold uppercase tracking-wider text-base-content/90">
+                  2. Document Agreement Field Values (<%= sub_data_count %> data fields<%= ", #{sub_sig_count} signature" if sub_sig_count.positive? %>)
+                </h3>
+                <p class="text-[11px] text-base-content/60">Populated automatically from MyKad IC, calculator screenshot, device box labels & notes</p>
+              </div>
+              <span class="badge badge-sm badge-ghost font-mono text-xs"><%= sub_data_count %> data + <%= sub_sig_count %> sign</span>
+            </div>
+
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <% sub_fields.each do |tf| %>
+                <% val = (sub['values'] || {})[tf['name']] || fields[tf['name']] || '' %>
+                <% en_trans = translations[tf['name']] %>
+                <div class="<%= 'md:col-span-2' if ['Alamat Penghantaran ("Pihak B")', 'Tandatangan Penerima ("Pihak B")'].include?(tf['name']) %> bg-base-200/50 p-3 rounded-xl border border-base-200">
+                  <div class="flex items-center justify-between mb-1.5">
+                    <label class="text-xs font-semibold text-base-content truncate flex items-center space-x-1.5">
+                      <span><%= tf['name'] %></span>
+                      <% if en_trans.present? %>
+                        <span class="text-[11px] text-base-content/50 font-normal italic">(<%= en_trans %>)</span>
+                      <% end %>
+                      <% if tf['required'] %><span class="text-error font-bold">*</span><% end %>
+                    </label>
+                    <span class="badge badge-xs badge-ghost text-[10px] uppercase font-mono"><%= tf['type'] %></span>
+                  </div>
+
+                  <% if tf['type'] == 'checkbox' %>
+                    <label class="cursor-pointer label justify-start gap-2 py-1">
+                      <%= check_box_tag "submission[submitters][#{idx}][values][#{tf['name']}]", 'true', [true, 'true', '1', 1, 'yes'].include?(val), class: 'checkbox checkbox-sm checkbox-neutral rounded-lg' %>
+                      <span class="label-text text-xs text-base-content/80 font-medium">Checked / Agreed</span>
+                    </label>
+                  <% elsif tf['type'] == 'date' %>
+                    <%= date_field_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, class: 'input input-sm input-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium' %>
+                  <% elsif tf['type'] == 'textarea' || tf['name'].include?('Alamat') %>
+                    <%= text_area_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, rows: 2, class: 'textarea textarea-sm textarea-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium' %>
+                  <% elsif tf['type'] == 'signature' %>
+                    <div class="p-3 bg-base-100 rounded-xl border border-dashed border-base-300 text-xs text-base-content/60 flex items-center space-x-2">
+                      <%= svg_icon('writing_sign', class: 'w-4 h-4 text-neutral-600') %>
+                      <span>Signature field assigned to recipient for online signing upon delivery.</span>
+                    </div>
+
+                  <% else %>
+                    <%= text_field_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, class: 'input input-sm input-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium', placeholder: "Value for #{tf['name']}" %>
+                  <% end %>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+
       <% end %>
 
-      <div class="pt-2 flex items-center justify-between">
-        <button type="button" onclick="document.getElementById('ai_extraction_results').classList.add('hidden'); document.getElementById('ai_upload_section').classList.remove('hidden');" class="btn btn-ghost btn-sm text-xs gap-1">
+      <!-- Bottom Action Bar -->
+      <div class="pt-3 flex items-center justify-between">
+        <button type="button" id="reupload_btn" data-action="reupload" class="btn btn-ghost btn-sm text-xs gap-1.5 rounded-xl font-medium cursor-pointer">
           <%= svg_icon('arrow_left', class: 'w-4 h-4') %>
           <span>Re-upload / Modify Data</span>
         </button>
 
-        <%= f.submit 'Create Document Submission', class: 'btn btn-neutral !bg-neutral-900 hover:!bg-black !text-white text-xs px-6 !h-10 !rounded-xl shadow-sm hover:shadow-md font-semibold cursor-pointer' %>
+        <%= f.submit 'Create Document Submission', class: 'btn btn-neutral !bg-neutral-900 hover:!bg-black !text-white text-xs px-8 !h-11 !rounded-xl shadow-sm hover:shadow-md font-bold cursor-pointer' %>
       </div>
 
     <% end %>
@@ -146,13 +185,13 @@
   <!-- JSON Output Tab -->
   <div id="ai_tab_json" class="hidden space-y-3">
     <div class="flex items-center justify-between">
-      <span class="text-xs text-base-content/70 font-medium">Raw Extracted JSON Data</span>
-      <button type="button" id="copy_json_btn" onclick="copyExtractedJson()" class="btn btn-sm !bg-neutral-800 hover:!bg-black !text-white !border-neutral-800 text-xs !rounded-xl gap-1.5 font-medium shadow-sm">
+      <span class="text-xs text-base-content/70 font-semibold">Raw Extracted JSON Output</span>
+      <button type="button" id="copy_json_btn" data-action="copy-json" class="btn btn-sm !bg-neutral-800 hover:!bg-black !text-white !border-neutral-800 text-xs !rounded-xl gap-1.5 font-medium shadow-sm cursor-pointer">
         <%= svg_icon('clipboard_copy', class: 'w-3.5 h-3.5 stroke-2 text-white') %>
         <span id="copy_json_label" class="text-white font-medium">Copy JSON</span>
       </button>
     </div>
-
-    <pre id="extracted_json_pre" class="p-3.5 bg-neutral text-neutral-content text-xs font-mono rounded-xl overflow-x-auto max-h-96 leading-relaxed select-all"><%= JSON.pretty_generate(raw_json.presence || extracted_data.slice(:summary, :submitters, :fields)) %></pre>
+    <pre id="extracted_json_pre" class="p-4 bg-neutral text-neutral-content text-xs font-mono rounded-2xl overflow-x-auto max-h-[500px] leading-relaxed select-all shadow-inner"><%= JSON.pretty_generate(raw_json.presence || extracted_data.slice(:summary, :submitters, :fields)) %></pre>
   </div>
+
 </div>
