@@ -230,12 +230,37 @@ RAW DATA EXTRACTION RULES:
     const hsInput = document.querySelector('input[data-field-name="Harga Sewa Sebulan"]');
     const jtInput = document.querySelector('input[data-field-name="Jumlah Tempoh Sewaan"], input[data-field-name="Tempoh Sewaan"]');
     const jsInput = document.querySelector('input[data-field-name="Jumlah Sewa"], input[data-field-name="Jumlah Sewaan"]');
-    if (hsInput && jtInput && jsInput) {
+    const tmInput = document.querySelector('input[data-field-name="Tarikh mula sewaan"], input[data-field-name="Tarikh Mula Sewaan"]');
+    const taInput = document.querySelector('input[data-field-name="Tarikh akhir sewaan"], input[data-field-name="Tarikh Akhir Sewaan"]');
+
+    const jt = jtInput ? parseFloat(jtInput.value.replace(/[^0-9.]/g, '')) || 0 : 0;
+
+    if (hsInput && jsInput) {
       const hs = parseFloat(hsInput.value.replace(/[^0-9.]/g, '')) || 0;
-      const jt = parseFloat(jtInput.value.replace(/[^0-9.]/g, '')) || 0;
       if (hs > 0 && jt > 0) {
         const total = hs * jt;
         jsInput.value = (total % 1 === 0) ? total.toString() : total.toFixed(2);
+      }
+    }
+
+    if (taInput && jt > 0) {
+      let baseDate = new Date();
+      if (tmInput && tmInput.value) {
+        const parts = tmInput.value.split('-');
+        if (parts.length === 3) {
+          if (parts[0].length === 4) {
+            baseDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+          } else {
+            baseDate = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+          }
+        }
+      }
+      if (!isNaN(baseDate.getTime())) {
+        baseDate.setMonth(baseDate.getMonth() + jt);
+        const d = String(baseDate.getDate()).padStart(2, '0');
+        const m = String(baseDate.getMonth() + 1).padStart(2, '0');
+        const y = baseDate.getFullYear();
+        taInput.value = `${d}-${m}-${y}`;
       }
     }
   };

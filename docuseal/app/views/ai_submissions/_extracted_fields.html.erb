@@ -179,7 +179,9 @@
                           <% if en_trans.present? %>
                             <span class="text-[11px] text-neutral-700 font-medium italic">(<%= en_trans %>)</span>
                           <% end %>
-                          <% if tf['name'].to_s.include?('Jumlah Sewa') %>
+                          <% if tf['name'].to_s.include?('Jumlah Tempoh Sewaan') || tf['name'].to_s.include?('Tempoh Sewaan') %>
+                            <span class="badge badge-xs font-mono text-[9px] bg-neutral-200 text-neutral-800 border-neutral-300">Period − 1</span>
+                          <% elsif tf['name'].to_s.include?('Jumlah Sewa') %>
                             <span class="badge badge-xs font-mono text-[9px] bg-neutral-200 text-neutral-800 border-neutral-300">Rent × Duration</span>
                           <% end %>
                           <% if tf['required'] %><span class="text-error font-bold">*</span><% end %>

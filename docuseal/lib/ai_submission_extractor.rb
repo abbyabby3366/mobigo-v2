@@ -99,10 +99,10 @@ module AiSubmissionExtractor
          - Quantity ("Kuantiti Peralatan", "Quantity"): Usually "1".
 
       3. Rental Pricing & Calculator Screenshots (e.g. dark blue calculator UI with Period table):
+         - Selected Period ("calculator_period", "period", "tempoh"): ALWAYS extract the selected period from the calculator UI (e.g. from the Period dropdown box "13Period", "* Period", or table text "Period: 13Period" -> "13Period" or "13"). Put this in the root "calculator_period" and fields["period"].
          - Retail / Product Price ("Harga Produk", "Harga Pasaran", "Retail Price"): Extract pure numeric price (e.g. top price box "6500" or "Retail Price: RM 6500" -> "6500").
          - Deposit Amount ("Deposit Produk", "Deposit Amount", "Deposit"): Extract pure numeric deposit (e.g. "Deposit Amount" box "1950" -> "1950").
          - Monthly Rent ("Harga Sewa Sebulan", "Monthly Rent", "Rent"): Extract monthly rental amount from table "Rent" column / Period rows (e.g. "758.33").
-         - Selected Period ("period", "calculator_period", "tempoh"): Extract raw selected period from dropdown or header (e.g. "13Period" or "13").
          - Note: DO NOT calculate or extract PROCESSED fields:
            * "Jumlah Sewa" (system computed: Monthly Rent * Rental Duration)
            * "Jumlah Tempoh Sewaan" (system computed: Period - 1, e.g. 13 - 1 = 12)
@@ -116,9 +116,10 @@ module AiSubmissionExtractor
          - Try to fill as many matching RAW fields as possible from the provided text, screenshots, ID cards, and documents.
          - When a raw field name has close synonyms in Malay or English, map the extracted value accurately.
 
-      CRITICAL: You MUST respond ONLY with a valid JSON object containing RAW fields, formatted EXACTLY as follows:
+      CRITICAL: You MUST respond ONLY with a valid JSON object formatted EXACTLY as follows:
       {
         "summary": "Short 1-2 sentence overview of extracted raw data and source documents",
+        "calculator_period": "<extracted raw period, e.g. '13Period' or '13' or '6'>",
         "submitters": [
           {
             "uuid": "<submitter_uuid>",
@@ -132,6 +133,7 @@ module AiSubmissionExtractor
           }
         ],
         "fields": {
+          "period": "<extracted raw period, e.g. '13Period' or '13'>",
           "<raw_field_name>": "<extracted raw value>"
         }
       }
@@ -562,6 +564,17 @@ module AiSubmissionExtractor
               fields_hash['tempoh'] || fields_hash['Tempoh'] || fields_hash['tempoh_sewaan'] ||
               fields_hash['Jumlah Tempoh Sewaan'] || fields_hash['rental_period'] || fields_hash['rental_duration']
 
+    if raw_val.blank?
+      # Deep scan across all fields_hash values for period patterns (e.g. "13Period", "Period: 13Period", "13 Months")
+      fields_hash.each do |_k, v|
+        next if v.blank? || !v.is_a?(String)
+        if v =~ /(?:period[:\s]*|tempoh[:\s]*|^)\s*(\d+)\s*(?:period|bulan|months?)/i || v =~ /period[:\s]+(\d+)/i
+          raw_val = Regexp.last_match(1)
+          break
+        end
+      end
+    end
+
     return nil if raw_val.blank?
 
     match = raw_val.to_s.match(/(\d+)/)
@@ -575,8 +588,10 @@ module AiSubmissionExtractor
     duration_val = fields_hash['Jumlah Tempoh Sewaan'] || fields_hash['rental_duration'] || fields_hash['tempoh_sewaan'] ||
                    calculate_jumlah_tempoh_sewaan(fields_hash)
 
+    return nil if duration_val.blank?
+
     months = duration_val.to_s.gsub(/[^0-9]/, '').to_i
-    months = 12 if months <= 0
+    return nil if months <= 0
 
     (now + months.months).strftime('%d-%m-%Y')
   end
@@ -772,6 +787,17 @@ module AiSubmissionExtractor
       en_k = english_key_for(k)
       english_fields[en_k] ||= v
       fields_hash[k] ||= v
+    end
+
+    # Explicitly capture calculator_period from root response or regex scan
+    calc_p = parsed_data['calculator_period'] || parsed_data['period'] || parsed_data['tempoh']
+    if calc_p.blank? && content =~ /(?:period[:\s]*|tempoh[:\s]*)\s*(\d+)\s*(?:period|bulan|months?)?/i
+      calc_p = Regexp.last_match(1)
+    end
+    if calc_p.present?
+      fields_hash['calculator_period'] ||= calc_p
+      fields_hash['period'] ||= calc_p
+      english_fields['calculator_period'] ||= calc_p
     end
 
     normalized_submitters = template_submitters.map do |ts|
