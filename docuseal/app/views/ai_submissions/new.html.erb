@@ -227,15 +227,15 @@ RAW DATA EXTRACTION RULES:
   window.aiSelectedFiles = window.aiSelectedFiles || [];
 
   window.recalculateJumlahSewa = function() {
-    const hpInput = document.querySelector('input[data-field-name="Harga Produk"], input[data-field-name="Harga Pasaran/Harga Produk"], input[data-field-name="Harga Pasaran"]');
-    const dpInput = document.querySelector('input[data-field-name="Deposit Produk"], input[data-field-name="Deposit"]');
+    const hsInput = document.querySelector('input[data-field-name="Harga Sewa Sebulan"]');
+    const jtInput = document.querySelector('input[data-field-name="Jumlah Tempoh Sewaan"], input[data-field-name="Tempoh Sewaan"]');
     const jsInput = document.querySelector('input[data-field-name="Jumlah Sewa"], input[data-field-name="Jumlah Sewaan"]');
-    if (hpInput && dpInput && jsInput) {
-      const hp = parseFloat(hpInput.value.replace(/[^0-9.]/g, '')) || 0;
-      const dp = parseFloat(dpInput.value.replace(/[^0-9.]/g, '')) || 0;
-      if (hp > 0) {
-        const diff = hp - dp;
-        jsInput.value = (diff % 1 === 0) ? diff.toString() : diff.toFixed(2);
+    if (hsInput && jtInput && jsInput) {
+      const hs = parseFloat(hsInput.value.replace(/[^0-9.]/g, '')) || 0;
+      const jt = parseFloat(jtInput.value.replace(/[^0-9.]/g, '')) || 0;
+      if (hs > 0 && jt > 0) {
+        const total = hs * jt;
+        jsInput.value = (total % 1 === 0) ? total.toString() : total.toFixed(2);
       }
     }
   };

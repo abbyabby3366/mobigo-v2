@@ -147,7 +147,7 @@
                       <% elsif tf['type'] == 'textarea' || tf['name'].to_s.include?('Alamat') %>
                         <%= text_area_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, rows: 2, class: 'textarea textarea-sm textarea-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium', data: { field_name: tf['name'] } %>
                       <% else %>
-                        <%= text_field_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, class: 'input input-sm input-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium', placeholder: "Value for #{field_name}", data: { field_name: tf['name'] }, oninput: "if(['Harga Produk', 'Deposit Produk', 'Harga Pasaran'].includes('#{tf['name']}')) { window.recalculateJumlahSewa && window.recalculateJumlahSewa(); }" %>
+                        <%= text_field_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, class: 'input input-sm input-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium', placeholder: "Value for #{field_name}", data: { field_name: tf['name'] }, oninput: "if(['Harga Sewa Sebulan'].includes('#{tf['name']}')) { window.recalculateJumlahSewa && window.recalculateJumlahSewa(); }" %>
                       <% end %>
                     </div>
                   <% end %>
@@ -180,7 +180,7 @@
                             <span class="text-[11px] text-neutral-700 font-medium italic">(<%= en_trans %>)</span>
                           <% end %>
                           <% if tf['name'].to_s.include?('Jumlah Sewa') %>
-                            <span class="badge badge-xs font-mono text-[9px] bg-neutral-200 text-neutral-800 border-neutral-300">Harga - Deposit</span>
+                            <span class="badge badge-xs font-mono text-[9px] bg-neutral-200 text-neutral-800 border-neutral-300">Rent × Duration</span>
                           <% end %>
                           <% if tf['required'] %><span class="text-error font-bold">*</span><% end %>
                         </label>
@@ -190,7 +190,7 @@
                       <% if tf['type'] == 'date' %>
                         <%= date_field_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, class: 'input input-sm input-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium', data: { field_name: tf['name'] } %>
                       <% else %>
-                        <%= text_field_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, class: 'input input-sm input-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium', placeholder: "Value for #{field_name}", data: { field_name: tf['name'] } %>
+                        <%= text_field_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, class: 'input input-sm input-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium', placeholder: "Value for #{field_name}", data: { field_name: tf['name'] }, oninput: "if(['Jumlah Tempoh Sewaan', 'Tempoh Sewaan'].includes('#{tf['name']}')) { window.recalculateJumlahSewa && window.recalculateJumlahSewa(); }" %>
                       <% end %>
                     </div>
                   <% end %>

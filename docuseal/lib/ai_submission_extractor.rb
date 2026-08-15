@@ -646,10 +646,25 @@ module AiSubmissionExtractor
       allocated_order_number = DailyOrderSequence.next_order_number(account, date: now)
     end
 
-    template_fields.each do |f|
+    # IMPORTANT: Process fields in dependency order.
+    # Jumlah Tempoh Sewaan must be computed FIRST because Tarikh akhir sewaan and Jumlah Sewa depend on it.
+    processed = template_fields.select { |f| processed_data_field?(f['name'], f['type']) }
+
+    # Sort: Jumlah Tempoh Sewaan first, then rental dates/sewa, then everything else
+    sorted_processed = processed.sort_by do |f|
+      normalized = f['name'].to_s.downcase
+      if normalized =~ /tempoh/
+        0  # Jumlah Tempoh Sewaan first
+      elsif normalized =~ /(mula|akhir|jumlah\s+sewa)/
+        1  # Dependent fields second
+      else
+        2  # Everything else (dates, order number)
+      end
+    end
+
+    sorted_processed.each do |f|
       f_name = f['name']
       f_type = f['type']
-      next unless processed_data_field?(f_name, f_type)
 
       calc_val = processed_data_value(f_name, f_type, account: account, order_number: allocated_order_number, now: now, fields_hash: fields_hash)
       next if calc_val.blank?
@@ -714,12 +729,6 @@ module AiSubmissionExtractor
         case f_name
         when 'Harga Sewa Sebulan'
           val = raw_fields['monthly_rent'] || raw_fields['monthly_rental_price'] || raw_fields['monthly_rental'] || raw_fields['rent'] || raw_fields['sewa_sebulan'] || raw_fields['harga_sewa'] || raw_fields['harga_sewa_bulanan']
-        when 'Jumlah Tempoh Sewaan', 'Tempoh Sewaan'
-          val = raw_fields['rental_duration'] || raw_fields['rental_period'] || raw_fields['tempoh_sewaan'] || raw_fields['jumlah_tempoh_sewaan'] || raw_fields['duration'] || raw_fields['period']
-        when 'Tarikh mula sewaan', 'Tarikh Mula Sewaan'
-          val = raw_fields['rental_start_date'] || raw_fields['start_date'] || raw_fields['tarikh_mula_sewaan'] || raw_fields['tarikh_mula']
-        when 'Tarikh akhir sewaan', 'Tarikh Akhir Sewaan'
-          val = raw_fields['rental_end_date'] || raw_fields['end_date'] || raw_fields['tarikh_akhir_sewaan'] || raw_fields['tarikh_akhir']
         when 'Deposit Produk'
           val = raw_fields['product_deposit'] || raw_fields['deposit'] || raw_fields['deposit_amount'] || raw_fields['deposit_produk'] || raw_fields['deposit_sewa']
         when 'Harga Produk'
