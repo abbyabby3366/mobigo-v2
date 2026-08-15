@@ -143,13 +143,14 @@ class AiSubmissionsController < ApplicationController
     normalized_submitters = submitters_list.map do |s|
       s_hash = s.is_a?(ActionController::Parameters) ? s.permit!.to_h : s.to_h
       values = s_hash[:values] || s_hash['values'] || {}
+      s_uuid = s_hash[:uuid] || s_hash['uuid']
 
       {
-        uuid: s_hash[:uuid] || s_hash['uuid'],
+        uuid: s_uuid,
         name: s_hash[:name] || s_hash['name'],
         email: s_hash[:email] || s_hash['email'],
         phone: s_hash[:phone] || s_hash['phone'],
-        'uuid' => s_hash[:uuid] || s_hash['uuid'],
+        'uuid' => s_uuid,
         'name' => s_hash[:name] || s_hash['name'],
         'email' => s_hash[:email] || s_hash['email'],
         'phone' => s_hash[:phone] || s_hash['phone'],
