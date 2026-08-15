@@ -17,7 +17,7 @@ module AiSubmissionExtractor
 
   module_function
 
-  def call(template:, text: nil, files: [])
+  def call(template:, text: nil, files: [], account: nil)
     api_url = ENV.fetch('AI_ROUTER_URL', DEFAULT_ROUTER_URL)
     api_key = ENV.fetch('AI_ROUTER_KEY', DEFAULT_API_KEY)
     primary_model = ENV.fetch('AI_ROUTER_MODEL', DEFAULT_MODEL)
@@ -41,17 +41,19 @@ module AiSubmissionExtractor
 
     raise "AI Extraction failed: #{errors.join('; ')}" if response_json.blank?
 
-    parse_ai_response(response_json, template)
+    parse_ai_response(response_json, template, account || template.account)
   end
 
   def build_prompt_parts(template, text, files)
     fields = template.fields.to_a
     submitters = template.submitters.to_a
 
-    fields_description = fields.map do |f|
+    raw_fields = fields.select { |f| f['type'] != 'signature' && !processed_data_field?(f['name'], f['type']) }
+
+    raw_fields_description = raw_fields.map do |f|
       sub = submitters.find { |s| s['uuid'] == f['submitter_uuid'] }
       sub_name = sub ? sub['name'] : 'Submitter'
-      desc = "- Field Name: #{f['name'].inspect}"
+      desc = "- Raw Field Name: #{f['name'].inspect}"
       desc += ", Type: #{f['type'].inspect}"
       desc += ", UUID: #{f['uuid'].inspect}"
       desc += ", Assigned Role/Submitter: #{sub_name.inspect} (uuid: #{f['submitter_uuid'].inspect})"
@@ -68,56 +70,50 @@ module AiSubmissionExtractor
 
     current_time = Time.current
     cur_date_str = current_time.strftime('%Y-%m-%d')
-    cur_day = current_time.strftime('%d')
-    cur_month = current_time.strftime('%m')
-    cur_year = current_time.strftime('%Y')
-    cur_short_year = current_time.strftime('%y')
 
     system_instructions = <<~INSTRUCTIONS
-      You are an expert AI document processing assistant specializing in extracting and populating form fields for contracts, equipment/phone rental agreements (e.g. PERJANJIAN PERKHIDMATAN SEWA, Mobigo), customer identity documents (e.g. Malaysian MyKad / Kad Pengenalan), calculator screenshots, device box labels (IMEI, Serial Number), and customer WhatsApp/order notes.
-
-      Current reference date: #{cur_date_str} (Day: #{cur_day}, Month: #{cur_month}, Year: #{cur_year}, Short Year: #{cur_short_year}).
+      You are an expert AI document processing assistant specializing in extracting structured RAW DATA from customer identity documents (e.g. Malaysian MyKad / Kad Pengenalan), calculator screenshots, device box labels (IMEI, Serial Number), and customer WhatsApp/order notes for equipment/phone rental agreements (e.g. PERJANJIAN PERKHIDMATAN SEWA, Mobigo).
 
       The target document template is: "#{template.name}".
 
       Expected submitters/parties for this document:
       #{submitters_description}
 
-      All fields to populate for this template:
-      #{fields_description}
+      CRITICAL INSTRUCTION:
+      Extract ONLY RAW DATA fields listed below. DO NOT extract, calculate, or include PROCESSED fields (such as Order Number or Date fields) or Signatures.
 
-      DOMAIN-SPECIFIC EXTRACTION RULES & FIELD MAPPING GUIDANCE:
+      RAW FIELDS TO EXTRACT FOR THIS TEMPLATE (#{raw_fields.size}):
+      #{raw_fields_description}
+
+      DOMAIN-SPECIFIC RAW EXTRACTION RULES & FIELD MAPPING GUIDANCE:
       1. Contact & Identity Information:
          - Customer / Recipient Full Name ("Nama", "Nama Penerima", "Pihak B", "Name"): Extract from MyKad IC photo or text notes (e.g. MOHAMMAD FAIZ BIN MOHD KHATIP).
          - IC / Identity Card Number ("No. Kad Pengenalan", "No. KP", "IC", "NRIC"): Extract from MyKad image (e.g. 890425-02-5957).
          - Phone Number ("Nombor Telefon", "No. Tel", "Mobile"): Extract from WhatsApp/order text (e.g. 01153565717).
          - Email Address ("E-mel", "Email"): Extract from WhatsApp/order text (e.g. mohdfaiz5957@gmail.com).
          - Address ("Alamat", "Alamat Penghantaran", "Address"): Extract full residential or delivery address from MyKad or text notes.
+
       2. Device & Product Information:
          - Product Name / Model ("Nama Produk", "Model", "Device Model"): Extract phone model and capacity from text or box image (e.g. "iPhone 17 Pro Max 256GB" or "iPhone 17 Pro Max, 512GB").
          - IMEI / Serial Number ("Nombor IMEI Telefon/ Siri Telefon", "IMEI", "Serial No"): Extract from device box label (e.g. IMEI: 354704736663104 / Serial: LG93CV43WP).
          - Quantity ("Kuantiti Peralatan", "Quantity"): Usually "1".
-      3. Rental, Pricing & Calculator Information:
-         - Order Number ("Nombor Pesanan", "Order Number"): Extract from order text/title (e.g. 1308202600).
-         - Retail Price ("Harga Pasaran/Harga Produk", "Harga Pasaran", "Retail Price"): Extract from calculator screenshot (e.g. "RM 6500" or "6500").
-         - Deposit ("Deposit Produk", "Deposit Amount", "Deposit"): Extract from calculator screenshot (e.g. "RM 1950" or "1950").
-         - Monthly Rent ("Harga Sewa Sebulan", "Monthly Rent", "Rent"): Extract from calculator screenshot (e.g. "RM 758.33" or "758.33").
-         - Total Rent ("Jumlah Sewa", "Total Rent"): Calculate or extract total rent across all periods.
-         - Duration / Period ("Jumlah Tempoh Sewaan", "Period", "Duration"): Extract from calculator (e.g. "13 Bulan" or "13 Period").
-         - Start Date ("Tarikh mula sewaan", "Start Date"): e.g. "#{cur_date_str}" or from payment date.
-         - End Date ("Tarikh akhir sewaan", "End Date"): Calculated from start date + period duration.
-      4. Agreement Header & Split Date Fields:
-         - If template has separate boxes for Day ("haribulan", "DD", "Day"), Month ("bulan", "MM", "Month"), and Year ("tahun", "YY", "YYYY"), fill with current date parts: Day = "#{cur_day}", Month = "#{cur_month}", Year = "#{cur_short_year}" or "#{cur_year}".
-         - "Tarikh Penerimaan" / "Tarikh Dibuat": Fill with current date "#{cur_date_str}" or relevant Malaysian date format (DD-MM-YYYY or YYYY-MM-DD).
-      5. Boolean / Checkbox Fields:
-         - Set to true if agreed, accepted, or checked.
-      6. Completeness:
-         - Try to fill as many matching fields as possible from the provided text, screenshots, ID cards, and documents.
-         - When a field name has close synonyms in Malay or English, map the extracted value accurately.
 
-      CRITICAL: You MUST respond ONLY with a valid JSON object formatted EXACTLY as follows:
+      3. Rental Pricing & Calculator Screenshots (e.g. dark blue calculator UI with Period table):
+         - Retail / Product Price ("Harga Produk", "Harga Pasaran", "Retail Price"): Extract pure numeric price (e.g. top price box "6500" or "Retail Price: RM 6500" -> "6500").
+         - Deposit Amount ("Deposit Produk", "Deposit Amount", "Deposit"): Extract pure numeric deposit (e.g. "Deposit Amount" box "1950" -> "1950").
+         - Monthly Rent ("Harga Sewa Sebulan", "Monthly Rent", "Rent"): Extract monthly rental amount from table "Rent" column / Period rows (e.g. "758.33").
+         - Note: DO NOT calculate or extract "Jumlah Sewa" (it is a system processed field computed by the system as Harga Produk - Deposit Produk).
+
+      4. Boolean / Checkbox Fields:
+         - Set to true if agreed, accepted, or checked.
+
+      5. Completeness:
+         - Try to fill as many matching RAW fields as possible from the provided text, screenshots, ID cards, and documents.
+         - When a raw field name has close synonyms in Malay or English, map the extracted value accurately.
+
+      CRITICAL: You MUST respond ONLY with a valid JSON object containing RAW fields, formatted EXACTLY as follows:
       {
-        "summary": "Short 1-2 sentence overview of extracted data and source documents",
+        "summary": "Short 1-2 sentence overview of extracted raw data and source documents",
         "submitters": [
           {
             "uuid": "<submitter_uuid>",
@@ -126,12 +122,12 @@ module AiSubmissionExtractor
             "email": "<extracted email or empty>",
             "phone": "<extracted phone or empty>",
             "values": {
-              "<field_name>": "<extracted value>"
+              "<raw_field_name>": "<extracted raw value>"
             }
           }
         ],
         "fields": {
-          "<field_name>": "<extracted value>"
+          "<raw_field_name>": "<extracted raw value>"
         }
       }
     INSTRUCTIONS
@@ -157,9 +153,19 @@ module AiSubmissionExtractor
   def process_uploaded_file(file_item, idx, user_content)
     return if file_item.blank?
 
-    filename = file_item.respond_to?(:original_filename) ? file_item.original_filename : "file_#{idx}"
-    content_type = file_item.respond_to?(:content_type) ? file_item.content_type : ''
-    bytes = if file_item.respond_to?(:read)
+    filename = if file_item.respond_to?(:original_filename)
+                 file_item.original_filename
+               elsif file_item.respond_to?(:filename)
+                 file_item.filename.to_s
+               else
+                 "file_#{idx}"
+               end
+
+    content_type = file_item.respond_to?(:content_type) ? file_item.content_type.to_s : ''
+
+    bytes = if file_item.respond_to?(:tempfile) && file_item.tempfile.respond_to?(:path) && File.exist?(file_item.tempfile.path)
+              File.binread(file_item.tempfile.path)
+            elsif file_item.respond_to?(:read)
               file_item.rewind if file_item.respond_to?(:rewind)
               file_item.read
             elsif file_item.is_a?(String)
@@ -293,13 +299,107 @@ module AiSubmissionExtractor
     JSON.parse(res.body)
   end
 
+  TRANSLATIONS = {
+    # Agreement date / Split dates
+    'Day Of Date' => 'Agreement Day (DD)',
+    'Day of Date' => 'Agreement Day (DD)',
+    'Day of Agreement' => 'Agreement Day (DD)',
+    'Haribulan' => 'Day of Month',
+    'Hari' => 'Day',
+    'Month Of Date' => 'Agreement Month (MM)',
+    'Month of Date' => 'Agreement Month (MM)',
+    'Month of Agreement' => 'Agreement Month (MM)',
+    'Bulan' => 'Month',
+    'Year of Date' => 'Agreement Year (YYYY)',
+    'Year Of Date' => 'Agreement Year (YYYY)',
+    'Year of Agreement' => 'Agreement Year (YYYY)',
+    'Tahun' => 'Year',
+    'Date' => 'Agreement / Signing Date',
+    'Tarikh' => 'Agreement / Signing Date',
+    'Tarikh Penerimaan' => 'Receipt Date',
+    'Tarikh mula sewaan' => 'Rental Start Date',
+    'Tarikh akhir sewaan' => 'Rental End Date',
+
+    # Order & Rental Terms
+    'Nombor Pesanan' => 'Order Number',
+    'No. Pesanan' => 'Order Number',
+    'No Pesanan' => 'Order Number',
+    'Order Number' => 'Order Number',
+    'Harga Sewa Sebulan' => 'Monthly Rental Price',
+    'Sewa Sebulan' => 'Monthly Rental Price',
+    'Jumlah Sewa' => 'Total Rental Amount',
+    'Jumlah Sewaan' => 'Total Rental Amount',
+    'Deposit Produk' => 'Product Deposit',
+    'Deposit' => 'Product Deposit',
+    'Harga Produk' => 'Product / Market Price',
+    'Harga Pasaran' => 'Market Price',
+    'Harga Pasaran/Harga Produk' => 'Retail / Market Price',
+    'Jumlah Tempoh Sewaan' => 'Total Rental Period',
+    'Tempoh Sewaan' => 'Total Rental Period',
+
+    # Device & Hardware
+    'Nama Produk' => 'Product Name / Model',
+    'Model Telefon' => 'Phone Model',
+    'Nombor IMEI' => 'IMEI Number',
+    'Nombor IMEI Telefon' => 'IMEI Number',
+    'No IMEI' => 'IMEI Number',
+    'IMEI' => 'IMEI Number',
+    'Siri Telefon' => 'Serial Number',
+    'No Siri' => 'Serial Number',
+    'Serial Number' => 'Serial Number',
+    'Nombor IMEI Telefon/ Siri Telefon' => 'IMEI / Serial Number',
+    'Kuantiti Peralatan' => 'Equipment Quantity',
+    'Kuantiti' => 'Equipment Quantity',
+
+    # Customer & Recipient Details
+    'Name' => 'Full Name / Recipient Name',
+    'Nama' => 'Full Name / Recipient Name',
+    'Nama Penerima' => 'Recipient Name',
+    'Nama Penerima ("Pihak B")' => 'Recipient Name',
+    'Full Name' => 'Full Name',
+    'No Kad Pengenalan' => 'IC / MyKad Number',
+    'No. Kad Pengenalan' => 'IC / MyKad Number',
+    'No KP' => 'IC / MyKad Number',
+    'No. KP' => 'IC / MyKad Number',
+    'Nombor Kad Pengenalan' => 'IC / MyKad Number',
+    'Nombor Telefon' => 'Recipient Phone Number',
+    'Nombor Telefon ("Pihak B")' => 'Recipient Phone Number',
+    'No Telefon' => 'Recipient Phone Number',
+    'No. Tel' => 'Recipient Phone Number',
+    'Phone Number' => 'Phone Number',
+    'Email' => 'Recipient Email',
+    'E-mel' => 'Recipient Email',
+    'E-mel ("Pihak B")' => 'Recipient Email',
+    'Emel' => 'Recipient Email',
+    'Alamat Penghantaran' => 'Delivery Address',
+    'Alamat Penghantaran ("Pihak B")' => 'Delivery Address',
+    'Alamat' => 'Residential / Delivery Address',
+
+    # Signatures
+    'Tandatangan Penerima ("Pihak B")' => 'Recipient Signature',
+    'Tandatangan Penerima' => 'Recipient Signature',
+    'Tandatangan Pihak B' => 'Recipient Signature',
+    'Tandatangan' => 'Signature',
+    'Signature' => 'Signature'
+  }.freeze
+
   FIELD_TO_ENGLISH_KEY = {
+    'Day Of Date' => 'day_of_date',
+    'Day of Date' => 'day_of_date',
+    'Day of Agreement' => 'day_of_agreement',
+    'Month Of Date' => 'month_of_date',
+    'Month of Date' => 'month_of_date',
+    'Month of Agreement' => 'month_of_agreement',
+    'Year of Date' => 'year_of_date',
+    'Year Of Date' => 'year_of_date',
+    'Year of Agreement' => 'year_of_agreement',
     'Nombor Pesanan' => 'order_number',
     'Nama Penerima ("Pihak B")' => 'recipient_name',
     'Nombor Telefon ("Pihak B")' => 'recipient_phone',
     'Alamat Penghantaran ("Pihak B")' => 'delivery_address',
     'E-mel ("Pihak B")' => 'recipient_email',
     'Nama Produk' => 'product_name',
+    'Nombor IMEI' => 'imei_number',
     'Nombor IMEI Telefon' => 'imei_number',
     'Siri Telefon' => 'serial_number',
     'Nombor IMEI Telefon/ Siri Telefon' => 'imei_and_serial',
@@ -310,11 +410,21 @@ module AiSubmissionExtractor
     'Harga Sewa Sebulan' => 'monthly_rent',
     'Jumlah Sewa' => 'total_rent',
     'Deposit Produk' => 'product_deposit',
+    'Harga Produk' => 'product_price',
     'Harga Pasaran/Harga Produk' => 'retail_price',
+    'Harga Pasaran' => 'market_price',
     'Tandatangan Penerima ("Pihak B")' => 'recipient_signature',
+    'Tandatangan Penerima' => 'recipient_signature',
     'Nama' => 'signer_name',
+    'Name' => 'signer_name',
+    'No Kad Pengenalan' => 'ic_number',
     'No. Kad Pengenalan' => 'ic_number',
+    'Date' => 'agreement_date',
+    'Tarikh' => 'agreement_date',
     'Tarikh Penerimaan' => 'receipt_date',
+    'Nombor Telefon' => 'recipient_phone',
+    'Alamat Penghantaran' => 'delivery_address',
+    'Email' => 'recipient_email',
     'Full Name' => 'full_name',
     'Phone Number' => 'phone_number',
     'Device Model' => 'device_model',
@@ -322,11 +432,198 @@ module AiSubmissionExtractor
     'Terms Accepted' => 'terms_accepted'
   }.freeze
 
+  def translation_for(field_name, field_type = nil)
+    name = field_name.to_s.strip
+
+    if name.blank?
+      return 'Recipient Signature' if field_type == 'signature'
+      return 'Data Field'
+    end
+
+    # Check direct dictionary lookup
+    trans = TRANSLATIONS[name]
+    return trans if trans.present?
+
+    # Normalized key lookup
+    normalized = name.downcase.gsub(/["'()]/, '').gsub(/\s+/, ' ').strip
+
+    TRANSLATIONS.each do |k, v|
+      norm_k = k.downcase.gsub(/["'()]/, '').gsub(/\s+/, ' ').strip
+      return v if normalized == norm_k
+    end
+
+    # Pattern / Keyword matching rules for any new or varied field names
+    case normalized
+    when /day.*date|haribulan|hari\b|day.*agreement|agreement.*day/i
+      'Agreement Day (DD)'
+    when /month.*date|bulan\b|month.*agreement|agreement.*month/i
+      'Agreement Month (MM)'
+    when /year.*date|tahun\b|year.*agreement|agreement.*year/i
+      'Agreement Year (YYYY)'
+    when /pesanan|order/i
+      'Order Number'
+    when /nama.*produk|model.*telefon|device.*model|product.*name/i
+      'Product Name / Model'
+    when /imei.*siri|siri.*imei/i
+      'IMEI / Serial Number'
+    when /imei/i
+      'IMEI Number'
+    when /siri|serial/i
+      'Serial Number'
+    when /kuantiti|quantity/i
+      'Equipment Quantity'
+    when /tarikh.*mula|start.*date/i
+      'Rental Start Date'
+    when /tarikh.*akhir|end.*date/i
+      'Rental End Date'
+    when /tarikh.*terima|tarikh.*penerimaan|receipt.*date/i
+      'Receipt Date'
+    when /tarikh|date/i
+      'Agreement / Signing Date'
+    when /tempoh.*sewa|rental.*duration|rental.*period/i
+      'Total Rental Period'
+    when /sewa.*sebulan|monthly.*rent/i
+      'Monthly Rental Price'
+    when /jumlah.*sewa|total.*rent/i
+      'Total Rental Amount'
+    when /deposit/i
+      'Product Deposit'
+    when /harga.*produk|harga.*pasaran|retail.*price|market.*price/i
+      'Product / Market Price'
+    when /harga/i
+      'Price / Amount'
+    when /kad.*pengenalan|no.*kp|ic.*number|mykad|nric/i
+      'IC / MyKad Number'
+    when /telefon|phone|mobile|tel\b/i
+      'Recipient Phone Number'
+    when /alamat.*hantar|delivery.*address/i
+      'Delivery Address'
+    when /alamat|address/i
+      'Residential / Delivery Address'
+    when /e-?mel|email/i
+      'Recipient Email'
+    when /tandatangan|signature/i
+      'Recipient Signature'
+    when /nama.*penerima|recipient.*name/i
+      'Recipient Name'
+    when /nama.*penuh|full.*name|nama\b|name\b/i
+      'Full Name / Recipient Name'
+    when /saksi/i
+      'Witness'
+    else
+      if field_type == 'signature'
+        'Recipient Signature'
+      elsif field_type == 'date'
+        'Date'
+      elsif field_type == 'phone'
+        'Phone Number'
+      elsif field_type == 'email'
+        'Email Address'
+      else
+        name.titleize
+      end
+    end
+  end
+
+  def processed_data_field?(field_name, field_type = nil)
+    return false if field_type == 'signature'
+
+    name = field_name.to_s.strip
+    normalized = name.downcase.gsub(/["'()]/, '').gsub(/\s+/, ' ').strip
+
+    # Nombor Pesanan / Order Number
+    return true if normalized =~ /\b(pesanan|order)\b/i
+
+    # Jumlah Sewa (Total Rent) = Harga Produk - Deposit Produk
+    return true if normalized =~ /\b(jumlah\s+sewa|jumlah\s+sewaan|total\s+rent)\b/i
+
+    # Date-related: explicit date, tarikh, haribulan, or standalone day/month/year/hari/bulan/tahun
+    return true if normalized =~ /\b(date|tarikh|haribulan)\b/i
+    return true if normalized =~ /\b(day|month|year|hari|bulan|tahun)\b/i
+
+    false
+  end
+
+  def calculate_jumlah_sewa(fields_hash = {})
+    return nil if fields_hash.blank?
+
+    hp_raw = fields_hash['Harga Produk'] || fields_hash['Harga Pasaran/Harga Produk'] || fields_hash['Harga Pasaran'] || fields_hash['product_price'] || fields_hash['retail_price'] || fields_hash['market_price']
+    dp_raw = fields_hash['Deposit Produk'] || fields_hash['Deposit'] || fields_hash['product_deposit'] || fields_hash['deposit_amount']
+
+    hp = hp_raw.to_s.gsub(/[^0-9.]/, '').to_f
+    dp = dp_raw.to_s.gsub(/[^0-9.]/, '').to_f
+
+    if hp > 0
+      diff = hp - dp
+      (diff % 1).zero? ? diff.to_i.to_s : sprintf('%.2f', diff)
+    else
+      nil
+    end
+  end
+
+  def processed_data_value(field_name, field_type = nil, account: nil, order_number: nil, now: Time.current, fields_hash: {})
+    name = field_name.to_s.strip
+    normalized = name.downcase.gsub(/["'()]/, '').gsub(/\s+/, ' ').strip
+
+    # 1. Day of Date (e.g. 22)
+    if normalized =~ /\b(day\s+of\s+date|haribulan|hari)\b/i || (normalized =~ /\bday\b/i && normalized !~ /\b(month|year|birth)\b/i)
+      now.strftime('%d')
+    # 2. Month of Date (e.g. 01)
+    elsif normalized =~ /\b(month\s+of\s+date|bulan)\b/i || (normalized =~ /\bmonth\b/i && normalized !~ /\b(day|year|rent)\b/i)
+      now.strftime('%m')
+    # 3. Year of Date (e.g. 2026)
+    elsif normalized =~ /\b(year\s+of\s+date|tahun)\b/i || (normalized =~ /\byear\b/i && normalized !~ /\b(day|month)\b/i)
+      now.strftime('%Y')
+    # 4. Order Number (e.g. 2026012200)
+    elsif normalized =~ /\b(pesanan|order)\b/i
+      order_number.presence || DailyOrderSequence.next_order_number(account, date: now)
+    # 5. Jumlah Sewa = Harga Produk - Deposit Produk
+    elsif normalized =~ /\b(jumlah\s+sewa|jumlah\s+sewaan|total\s+rent)\b/i
+      calculate_jumlah_sewa(fields_hash || {})
+    # 6. Date (e.g. 22-01-2026)
+    elsif normalized =~ /\b(date|tarikh)\b/i || field_type.to_s == 'date'
+      now.strftime('%d-%m-%Y')
+    else
+      nil
+    end
+  end
+
+  def populate_processed_fields!(fields_hash, template_fields, template_submitters, normalized_submitters, english_fields, account: nil, now: Time.current)
+    allocated_order_number = nil
+
+    # Allocate order number once per document submission if an order field exists
+    has_order_field = template_fields.any? { |f| processed_data_field?(f['name'], f['type']) && f['name'].to_s.downcase =~ /\b(pesanan|order)\b/i }
+    if has_order_field
+      allocated_order_number = DailyOrderSequence.next_order_number(account, date: now)
+    end
+
+    template_fields.each do |f|
+      f_name = f['name']
+      f_type = f['type']
+      next unless processed_data_field?(f_name, f_type)
+
+      calc_val = processed_data_value(f_name, f_type, account: account, order_number: allocated_order_number, now: now, fields_hash: fields_hash)
+      next if calc_val.blank?
+
+      fields_hash[f_name] = calc_val
+      en_key = english_key_for(f_name)
+      english_fields[en_key] = calc_val
+
+      # Populate into matching submitter values
+      normalized_submitters.each do |sub|
+        if sub['uuid'] == f['submitter_uuid'] || f['submitter_uuid'].blank?
+          sub['values'] ||= {}
+          sub['values'][f_name] = calc_val
+        end
+      end
+    end
+  end
+
   def english_key_for(field_name)
     FIELD_TO_ENGLISH_KEY[field_name] || field_name.to_s.parameterize.underscore
   end
 
-  def parse_ai_response(response_json, template)
+  def parse_ai_response(response_json, template, account = nil)
     content = response_json.dig('choices', 0, 'message', 'content') ||
               response_json.dig('choices', 0, 'delta', 'content') ||
               response_json.dig('message', 'content') ||
@@ -360,8 +657,34 @@ module AiSubmissionExtractor
       f_name = f['name']
       en_key = english_key_for(f_name)
 
-      # Check if raw_fields has either Malay name or English key
+      # Direct and standard key matching
       val = raw_fields[f_name] || raw_fields[en_key] || raw_fields[en_key.camelize] || raw_fields[f_name.parameterize.underscore]
+
+      # Robust synonym & alias matching for raw data fields
+      if val.blank?
+        case f_name
+        when 'Harga Sewa Sebulan'
+          val = raw_fields['monthly_rent'] || raw_fields['monthly_rental_price'] || raw_fields['monthly_rental'] || raw_fields['rent'] || raw_fields['sewa_sebulan'] || raw_fields['harga_sewa'] || raw_fields['harga_sewa_bulanan']
+        when 'Deposit Produk'
+          val = raw_fields['product_deposit'] || raw_fields['deposit'] || raw_fields['deposit_amount'] || raw_fields['deposit_produk'] || raw_fields['deposit_sewa']
+        when 'Harga Produk'
+          val = raw_fields['product_price'] || raw_fields['retail_price'] || raw_fields['market_price'] || raw_fields['harga_pasaran'] || raw_fields['harga_produk'] || raw_fields['price'] || raw_fields['harga']
+        when 'Nama Produk'
+          val = raw_fields['product_name'] || raw_fields['device_model'] || raw_fields['model'] || raw_fields['nama_produk']
+        when 'Nombor IMEI'
+          val = raw_fields['imei_number'] || raw_fields['imei'] || raw_fields['nombor_imei']
+        when 'Nombor Telefon'
+          val = raw_fields['phone_number'] || raw_fields['phone'] || raw_fields['mobile'] || raw_fields['nombor_telefon'] || raw_fields['no_tel']
+        when 'Alamat Penghantaran'
+          val = raw_fields['delivery_address'] || raw_fields['address'] || raw_fields['alamat'] || raw_fields['alamat_penghantaran']
+        when 'Email'
+          val = raw_fields['recipient_email'] || raw_fields['email'] || raw_fields['e_mel'] || raw_fields['emel']
+        when 'No Kad Pengenalan'
+          val = raw_fields['ic_number'] || raw_fields['ic'] || raw_fields['mykad'] || raw_fields['nric'] || raw_fields['no_kp'] || raw_fields['no_kad_pengenalan']
+        when 'Name'
+          val = raw_fields['full_name'] || raw_fields['recipient_name'] || raw_fields['name'] || raw_fields['nama'] || raw_fields['nama_penerima']
+        end
+      end
 
       if val.blank? && parsed_data['submitters'].present?
         parsed_data['submitters'].each do |sub_d|
@@ -422,6 +745,9 @@ module AiSubmissionExtractor
       }
     end
 
+    # Auto-populate hardcoded Processed Data Fields (Dates & Daily Incremental Order Number)
+    populate_processed_fields!(fields_hash, template_fields, template_submitters, normalized_submitters, english_fields, account: account)
+
     first_sub = normalized_submitters.first || {}
 
     # Clean English JSON Output
@@ -451,6 +777,5 @@ module AiSubmissionExtractor
       raw_content: content
     }
   end
-
-
 end
+

@@ -1,28 +1,5 @@
 <%
   template_fields = template.fields.to_a
-  translations = {
-    'Nombor Pesanan' => 'Order Number',
-    'Nama Penerima ("Pihak B")' => 'Recipient Name',
-    'Nombor Telefon ("Pihak B")' => 'Recipient Phone',
-    'Alamat Penghantaran ("Pihak B")' => 'Delivery Address',
-    'E-mel ("Pihak B")' => 'Recipient Email',
-    'Nama Produk' => 'Product Name / Model',
-    'Nombor IMEI Telefon' => 'IMEI Number',
-    'Siri Telefon' => 'Serial Number',
-    'Nombor IMEI Telefon/ Siri Telefon' => 'IMEI / Serial Number',
-    'Kuantiti Peralatan' => 'Equipment Quantity',
-    'Tarikh mula sewaan' => 'Rental Start Date',
-    'Tarikh akhir sewaan' => 'Rental End Date',
-    'Jumlah Tempoh Sewaan' => 'Total Rental Period',
-    'Harga Sewa Sebulan' => 'Monthly Rental Price',
-    'Jumlah Sewa' => 'Total Rental Amount',
-    'Deposit Produk' => 'Product Deposit',
-    'Harga Pasaran/Harga Produk' => 'Retail / Market Price',
-    'Tandatangan Penerima ("Pihak B")' => 'Recipient Signature',
-    'Nama' => 'Name',
-    'No. Kad Pengenalan' => 'IC / MyKad Number',
-    'Tarikh Penerimaan' => 'Receipt Date'
-  }
 %>
 
 
@@ -46,9 +23,8 @@
     <button type="button" id="tab_btn_form" data-action="switch-tab-form" class="py-2.5 px-4 text-xs font-bold border-b-2 border-neutral-900 text-neutral-900 transition-colors cursor-pointer">
       Form Fields (Review & Edit)
     </button>
-    <button type="button" id="tab_btn_json" data-action="switch-tab-json" class="py-2.5 px-4 text-xs font-semibold border-b-2 border-transparent text-base-content/60 hover:text-base-content transition-colors flex items-center space-x-1 cursor-pointer">
-      <span>JSON Output</span>
-      <span class="badge badge-xs badge-neutral font-mono">JSON</span>
+    <button type="button" id="tab_btn_json" data-action="switch-tab-json" class="py-2.5 px-4 text-xs font-semibold border-b-2 border-transparent text-base-content/60 hover:text-base-content transition-colors cursor-pointer">
+      JSON Output
     </button>
   </div>
 
@@ -113,57 +89,151 @@
 
         <!-- SECTION 2: Agreement Document Field Values -->
         <% if sub_fields.present? %>
-          <% sub_sig_count = sub_fields.count { |f| f['type'] == 'signature' } %>
-          <% sub_data_count = sub_fields.size - sub_sig_count %>
-          <div class="card bg-base-100 border border-base-300 rounded-2xl p-5 shadow-sm space-y-4">
+          <% sub_raw_fields = sub_fields.select { |tf| tf['type'] != 'signature' && !AiSubmissionExtractor.processed_data_field?(tf['name'], tf['type']) } %>
+          <% sub_processed_fields = sub_fields.select { |tf| tf['type'] != 'signature' && AiSubmissionExtractor.processed_data_field?(tf['name'], tf['type']) } %>
+          <% sub_signatures = sub_fields.select { |tf| tf['type'] == 'signature' } %>
+          <div class="card bg-base-100 border border-base-300 rounded-2xl p-5 shadow-sm space-y-5">
             <div class="flex items-center justify-between pb-3 border-b border-base-200">
               <div>
                 <h3 class="text-xs font-bold uppercase tracking-wider text-base-content/90">
-                  2. Document Agreement Field Values (<%= sub_data_count %> data fields<%= ", #{sub_sig_count} signature" if sub_sig_count.positive? %>)
+                  2. Document Agreement Field Values (<%= sub_raw_fields.size + sub_processed_fields.size %> data fields<%= ", #{sub_signatures.size} signature" if sub_signatures.present? %>)
                 </h3>
                 <p class="text-[11px] text-base-content/60">Populated automatically from MyKad IC, calculator screenshot, device box labels & notes</p>
               </div>
-              <span class="badge badge-sm badge-ghost font-mono text-xs"><%= sub_data_count %> data + <%= sub_sig_count %> sign</span>
+              <div class="flex items-center space-x-1.5">
+                <span class="badge badge-sm font-mono text-xs" style="background-color: #18181b !important; color: #ffffff !important;"><%= sub_raw_fields.size %> Raw</span>
+                <span class="badge badge-sm font-mono text-xs" style="background-color: #3f3f46 !important; color: #ffffff !important;"><%= sub_processed_fields.size %> Processed</span>
+                <% if sub_signatures.present? %>
+                  <span class="badge badge-sm font-mono text-xs" style="background-color: #ffffff !important; color: #18181b !important; border: 1px solid #71717a !important;"><%= sub_signatures.size %> Sign</span>
+                <% end %>
+              </div>
             </div>
 
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <% sub_fields.each do |tf| %>
-                <% val = (sub['values'] || {})[tf['name']] || fields[tf['name']] || '' %>
-                <% en_trans = translations[tf['name']] %>
-                <div class="<%= 'md:col-span-2' if ['Alamat Penghantaran ("Pihak B")', 'Tandatangan Penerima ("Pihak B")'].include?(tf['name']) %> bg-base-200/50 p-3 rounded-xl border border-base-200">
-                  <div class="flex items-center justify-between mb-1.5">
-                    <label class="text-xs font-semibold text-base-content truncate flex items-center space-x-1.5">
-                      <span><%= tf['name'] %></span>
-                      <% if en_trans.present? %>
-                        <span class="text-[11px] text-base-content/50 font-normal italic">(<%= en_trans %>)</span>
-                      <% end %>
-                      <% if tf['required'] %><span class="text-error font-bold">*</span><% end %>
-                    </label>
-                    <span class="badge badge-xs badge-ghost text-[10px] uppercase font-mono"><%= tf['type'] %></span>
+            <!-- 2A. Raw Data Fields -->
+            <% if sub_raw_fields.present? %>
+              <div class="space-y-3">
+                <div class="flex items-center justify-between pb-1">
+                  <div class="flex items-center space-x-1.5">
+                    <span class="text-xs font-bold uppercase tracking-wider text-base-content/90">Raw Data Fields (<%= sub_raw_fields.size %>)</span>
+                    <span class="badge badge-xs font-mono text-[9px]" style="background-color: #18181b !important; color: #ffffff !important;">Source Data</span>
                   </div>
+                  <span class="text-[10px] text-base-content/70 font-medium">Directly from IC, Box IMEI, Calculator & Notes</span>
+                </div>
 
-                  <% if tf['type'] == 'checkbox' %>
-                    <label class="cursor-pointer label justify-start gap-2 py-1">
-                      <%= check_box_tag "submission[submitters][#{idx}][values][#{tf['name']}]", 'true', [true, 'true', '1', 1, 'yes'].include?(val), class: 'checkbox checkbox-sm checkbox-neutral rounded-lg' %>
-                      <span class="label-text text-xs text-base-content/80 font-medium">Checked / Agreed</span>
-                    </label>
-                  <% elsif tf['type'] == 'date' %>
-                    <%= date_field_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, class: 'input input-sm input-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium' %>
-                  <% elsif tf['type'] == 'textarea' || tf['name'].include?('Alamat') %>
-                    <%= text_area_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, rows: 2, class: 'textarea textarea-sm textarea-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium' %>
-                  <% elsif tf['type'] == 'signature' %>
-                    <div class="p-3 bg-base-100 rounded-xl border border-dashed border-base-300 text-xs text-base-content/60 flex items-center space-x-2">
-                      <%= svg_icon('writing_sign', class: 'w-4 h-4 text-neutral-600') %>
-                      <span>Signature field assigned to recipient for online signing upon delivery.</span>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <% sub_raw_fields.each do |tf| %>
+                    <% val = (sub['values'] || {})[tf['name']] || fields[tf['name']] || '' %>
+                    <% field_name = tf['name'].presence || 'Field' %>
+                    <% en_trans = AiSubmissionExtractor.translation_for(tf['name'], tf['type']) %>
+                    <div class="<%= 'md:col-span-2' if ['Alamat Penghantaran ("Pihak B")', 'Alamat Penghantaran'].include?(tf['name']) %> bg-base-200/50 p-3 rounded-xl border border-base-200">
+                      <div class="flex items-center justify-between mb-1.5">
+                        <label class="text-xs font-semibold text-base-content truncate flex items-center space-x-1.5">
+                          <span><%= field_name %></span>
+                          <% if en_trans.present? %>
+                            <span class="text-[11px] text-neutral-700 font-medium italic">(<%= en_trans %>)</span>
+                          <% end %>
+                          <% if tf['required'] %><span class="text-error font-bold">*</span><% end %>
+                        </label>
+                        <span class="badge badge-xs text-[10px] uppercase font-mono" style="background-color: #f4f4f5 !important; color: #18181b !important; border: 1px solid #e4e4e7 !important;"><%= tf['type'] %></span>
+                      </div>
+
+                      <% if tf['type'] == 'checkbox' %>
+                        <label class="cursor-pointer label justify-start gap-2 py-1">
+                          <%= check_box_tag "submission[submitters][#{idx}][values][#{tf['name']}]", 'true', [true, 'true', '1', 1, 'yes'].include?(val), class: 'checkbox checkbox-sm checkbox-neutral rounded-lg', data: { field_name: tf['name'] } %>
+                          <span class="label-text text-xs text-base-content/80 font-medium">Checked / Agreed</span>
+                        </label>
+                      <% elsif tf['type'] == 'date' %>
+                        <%= date_field_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, class: 'input input-sm input-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium', data: { field_name: tf['name'] } %>
+                      <% elsif tf['type'] == 'textarea' || tf['name'].to_s.include?('Alamat') %>
+                        <%= text_area_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, rows: 2, class: 'textarea textarea-sm textarea-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium', data: { field_name: tf['name'] } %>
+                      <% else %>
+                        <%= text_field_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, class: 'input input-sm input-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium', placeholder: "Value for #{field_name}", data: { field_name: tf['name'] }, oninput: "if(['Harga Produk', 'Deposit Produk', 'Harga Pasaran'].includes('#{tf['name']}')) { window.recalculateJumlahSewa && window.recalculateJumlahSewa(); }" %>
+                      <% end %>
                     </div>
-
-                  <% else %>
-                    <%= text_field_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, class: 'input input-sm input-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium', placeholder: "Value for #{tf['name']}" %>
                   <% end %>
                 </div>
-              <% end %>
-            </div>
+              </div>
+            <% end %>
+
+            <!-- 2B. Processed Data Fields -->
+            <% if sub_processed_fields.present? %>
+              <div class="space-y-3 pt-3 border-t border-base-200">
+                <div class="flex items-center justify-between pb-1">
+                  <div class="flex items-center space-x-1.5">
+                    <span class="text-xs font-bold uppercase tracking-wider text-base-content/90">Processed Data Fields (<%= sub_processed_fields.size %>)</span>
+                    <span class="badge badge-xs font-mono text-[9px]" style="background-color: #3f3f46 !important; color: #ffffff !important;">Dates & Orders</span>
+                  </div>
+                  <span class="text-[10px] text-base-content/70 font-medium">All Date-related fields, Order Number & Calculated Rent</span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <% sub_processed_fields.each do |tf| %>
+                    <% val = (sub['values'] || {})[tf['name']] || fields[tf['name']] %>
+                    <% val = AiSubmissionExtractor.processed_data_value(tf['name'], tf['type'], fields_hash: fields) if val.blank? %>
+                    <% field_name = tf['name'].presence || 'Processed Field' %>
+                    <% en_trans = AiSubmissionExtractor.translation_for(tf['name'], tf['type']) %>
+                    <div class="bg-base-200/50 p-3 rounded-xl border border-base-200">
+                      <div class="flex items-center justify-between mb-1.5">
+                        <label class="text-xs font-semibold text-base-content truncate flex items-center space-x-1.5">
+                          <span><%= field_name %></span>
+                          <% if en_trans.present? %>
+                            <span class="text-[11px] text-neutral-700 font-medium italic">(<%= en_trans %>)</span>
+                          <% end %>
+                          <% if tf['name'].to_s.include?('Jumlah Sewa') %>
+                            <span class="badge badge-xs font-mono text-[9px] bg-neutral-200 text-neutral-800 border-neutral-300">Harga - Deposit</span>
+                          <% end %>
+                          <% if tf['required'] %><span class="text-error font-bold">*</span><% end %>
+                        </label>
+                        <span class="badge badge-xs text-[10px] uppercase font-mono" style="background-color: #f4f4f5 !important; color: #18181b !important; border: 1px solid #e4e4e7 !important;"><%= tf['type'] %></span>
+                      </div>
+
+                      <% if tf['type'] == 'date' %>
+                        <%= date_field_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, class: 'input input-sm input-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium', data: { field_name: tf['name'] } %>
+                      <% else %>
+                        <%= text_field_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, class: 'input input-sm input-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium', placeholder: "Value for #{field_name}", data: { field_name: tf['name'] } %>
+                      <% end %>
+                    </div>
+                  <% end %>
+                </div>
+              </div>
+            <% end %>
+
+            <!-- 2C. Signature Fields -->
+            <% if sub_signatures.present? %>
+              <div class="space-y-3 pt-3 border-t border-base-200">
+                <div class="flex items-center justify-between pb-1">
+                  <div class="flex items-center space-x-1.5">
+                    <span class="text-xs font-bold uppercase tracking-wider text-base-content/90">Signature Fields (<%= sub_signatures.size %>)</span>
+                    <span class="badge badge-xs text-[9px] uppercase font-mono" style="background-color: #ffffff !important; color: #18181b !important; border: 1px solid #71717a !important;">Sign-off</span>
+                  </div>
+                  <span class="text-[10px] text-base-content/70 font-medium">Online signing upon delivery</span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <% sub_signatures.each do |tf| %>
+                    <% field_name = tf['name'].presence || 'Recipient Signature' %>
+                    <% en_trans = AiSubmissionExtractor.translation_for(tf['name'], 'signature') %>
+                    <div class="md:col-span-2 bg-base-200/50 p-3 rounded-xl border border-dashed border-base-300">
+                      <div class="flex items-center justify-between mb-1.5">
+                        <label class="text-xs font-semibold text-base-content truncate flex items-center space-x-1.5">
+                          <span><%= field_name %></span>
+                          <% if en_trans.present? %>
+                            <span class="text-[11px] text-neutral-700 font-medium italic">(<%= en_trans %>)</span>
+                          <% end %>
+                          <% if tf['required'] %><span class="text-error font-bold">*</span><% end %>
+                        </label>
+                        <span class="badge badge-xs text-[10px] uppercase font-mono" style="background-color: #18181b !important; color: #ffffff !important;">SIGNATURE</span>
+                      </div>
+
+                      <div class="p-3 bg-base-100 rounded-xl border border-dashed border-base-300 text-xs text-base-content/60 flex items-center space-x-2">
+                        <%= svg_icon('writing_sign', class: 'w-4 h-4 text-neutral-600') %>
+                        <span>Signature field assigned to recipient for online signing upon delivery.</span>
+                      </div>
+                    </div>
+                  <% end %>
+                </div>
+              </div>
+            <% end %>
           </div>
         <% end %>
 
@@ -185,13 +255,13 @@
   <!-- JSON Output Tab -->
   <div id="ai_tab_json" class="hidden space-y-3">
     <div class="flex items-center justify-between">
-      <span class="text-xs text-base-content/70 font-semibold">Raw Extracted JSON Output</span>
-      <button type="button" id="copy_json_btn" data-action="copy-json" class="btn btn-sm !bg-neutral-800 hover:!bg-black !text-white !border-neutral-800 text-xs !rounded-xl gap-1.5 font-medium shadow-sm cursor-pointer">
+      <span class="text-xs text-base-content/80 font-bold">Raw Extracted JSON Output</span>
+      <button type="button" id="copy_json_btn" data-action="copy-json" class="btn btn-sm text-xs !rounded-xl gap-1.5 font-bold shadow-sm cursor-pointer" style="background-color: #18181b !important; color: #ffffff !important; border: 1px solid #18181b !important;">
         <%= svg_icon('clipboard_copy', class: 'w-3.5 h-3.5 stroke-2 text-white') %>
-        <span id="copy_json_label" class="text-white font-medium">Copy JSON</span>
+        <span id="copy_json_label" class="font-bold text-white" style="color: #ffffff !important;">Copy JSON</span>
       </button>
     </div>
-    <pre id="extracted_json_pre" class="p-4 bg-neutral text-neutral-content text-xs font-mono rounded-2xl overflow-x-auto max-h-[500px] leading-relaxed select-all shadow-inner"><%= JSON.pretty_generate(raw_json.presence || extracted_data.slice(:summary, :submitters, :fields)) %></pre>
+    <pre id="extracted_json_pre" class="p-4 bg-neutral text-neutral-content text-xs font-mono rounded-2xl overflow-x-auto max-h-[500px] leading-relaxed select-all shadow-inner"><%= JSON.pretty_generate(local_assigns[:raw_json].presence || (local_assigns[:extracted_data] || {}).slice(:summary, :submitters, :fields)) %></pre>
   </div>
 
 </div>

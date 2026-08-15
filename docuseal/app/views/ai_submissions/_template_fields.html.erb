@@ -1,35 +1,9 @@
 <% fields = template.fields.to_a %>
 <% signatures = fields.select { |f| f['type'] == 'signature' } %>
-<% data_fields = fields.reject { |f| f['type'] == 'signature' } %>
+<% raw_fields = fields.select { |f| f['type'] != 'signature' && !AiSubmissionExtractor.processed_data_field?(f['name'], f['type']) } %>
+<% processed_fields = fields.select { |f| f['type'] != 'signature' && AiSubmissionExtractor.processed_data_field?(f['name'], f['type']) } %>
+<% total_data_count = raw_fields.size + processed_fields.size %>
 <% submitters = template.submitters.to_a %>
-<%
-  translations = {
-    'Nombor Pesanan' => 'Order Number',
-    'Nama Penerima ("Pihak B")' => 'Recipient Name',
-    'Nombor Telefon ("Pihak B")' => 'Recipient Phone',
-    'Alamat Penghantaran ("Pihak B")' => 'Delivery Address',
-    'E-mel ("Pihak B")' => 'Recipient Email',
-    'Nama Produk' => 'Product Name / Model',
-    'Nombor IMEI Telefon' => 'IMEI Number',
-    'Siri Telefon' => 'Serial Number',
-    'Nombor IMEI Telefon/ Siri Telefon' => 'IMEI / Serial Number',
-    'Kuantiti Peralatan' => 'Equipment Quantity',
-    'Tarikh mula sewaan' => 'Rental Start Date',
-    'Tarikh akhir sewaan' => 'Rental End Date',
-    'Jumlah Tempoh Sewaan' => 'Total Rental Period',
-    'Harga Sewa Sebulan' => 'Monthly Rental Price',
-    'Jumlah Sewa' => 'Total Rental Amount',
-    'Deposit Produk' => 'Product Deposit',
-    'Harga Pasaran/Harga Produk' => 'Retail / Market Price',
-    'Tandatangan Penerima ("Pihak B")' => 'Recipient Signature',
-    'Nama' => 'Name',
-    'No. Kad Pengenalan' => 'IC / MyKad Number',
-    'Tarikh Penerimaan' => 'Receipt Date',
-    'Haribulan' => 'Day of Month',
-    'Bulan' => 'Month',
-    'Tahun' => 'Year'
-  }
-%>
 
 <div class="mt-3 bg-base-200/80 rounded-2xl border border-base-300 overflow-hidden shadow-2xs">
   <details class="group">
@@ -37,15 +11,16 @@
 
     <summary class="flex items-center justify-between p-3.5 cursor-pointer select-none bg-base-200 hover:bg-base-300/60 transition-colors list-none">
       <div class="flex items-center space-x-2 flex-wrap gap-y-1">
-        <span class="font-bold text-xs uppercase tracking-wider text-base-content/80">Template Fields</span>
-        <span class="badge badge-sm badge-neutral font-bold"><%= data_fields.size %> Data <%= 'Field'.pluralize(data_fields.size) %></span>
+        <span class="font-bold text-xs uppercase tracking-wider text-base-content/90">Template Fields</span>
+        <span class="badge badge-sm font-bold shadow-2xs" style="background-color: #18181b !important; color: #ffffff !important; border: 1px solid #18181b !important;"><%= raw_fields.size %> Raw Data</span>
+        <span class="badge badge-sm font-bold shadow-2xs" style="background-color: #3f3f46 !important; color: #ffffff !important; border: 1px solid #3f3f46 !important;"><%= processed_fields.size %> Processed Data</span>
         <% if signatures.present? %>
-          <span class="badge badge-sm badge-outline border-neutral-400 text-neutral-800 font-semibold"><%= signatures.size %> <%= 'Signature'.pluralize(signatures.size) %></span>
+          <span class="badge badge-sm font-semibold shadow-2xs" style="background-color: #ffffff !important; color: #18181b !important; border: 1px solid #a1a1aa !important;"><%= signatures.size %> <%= 'Signature'.pluralize(signatures.size) %></span>
         <% end %>
       </div>
       <div class="flex items-center space-x-2 flex-shrink-0">
-        <span class="text-[11px] text-base-content/50 group-open:hidden">Expand</span>
-        <span class="text-[11px] text-base-content/50 hidden group-open:inline">Collapse</span>
+        <span class="text-[11px] text-base-content/70 font-medium group-open:hidden">Expand</span>
+        <span class="text-[11px] text-base-content/70 font-medium hidden group-open:inline">Collapse</span>
         <div class="p-1 rounded-md bg-base-100/80 text-base-content/70 group-open:rotate-180 transition-transform duration-200">
           <%= svg_icon('chevron_down', class: 'w-4 h-4 stroke-2') %>
         </div>
@@ -54,42 +29,47 @@
 
     <!-- Accordion Body -->
     <div class="p-3.5 pt-1 border-t border-base-300 space-y-3">
-      <div class="flex items-center justify-between py-1 text-[11px] text-base-content/60">
-        <span>AI populates all <%= data_fields.size %> data fields automatically</span>
-        <span class="font-mono text-[10px]"><%= data_fields.size %> text/date + <%= signatures.size %> signature</span>
+      <div class="flex items-center justify-between py-1 text-[11px] text-base-content/80 font-medium">
+        <span>AI populates all <%= total_data_count %> data fields automatically</span>
+        <span class="font-mono text-[10px] text-base-content/70"><%= raw_fields.size %> raw + <%= processed_fields.size %> processed + <%= signatures.size %> sign</span>
       </div>
 
       <% if fields.blank? %>
-        <div class="text-xs text-warning py-3 flex items-center space-x-1.5">
+        <div class="text-xs text-warning py-3 flex items-center space-x-1.5 font-medium">
           <%= svg_icon('alert_circle', class: 'w-4 h-4') %>
           <span>This template currently has no form fields defined.</span>
         </div>
       <% else %>
-        <!-- Section 1: Data Fields -->
+        <!-- Section 1: Raw Data Fields -->
         <div class="space-y-1.5">
-          <div class="text-[11px] font-bold uppercase tracking-wider text-base-content/70 flex items-center justify-between">
-            <span>Data Fields to Populate (<%= data_fields.size %>)</span>
+          <div class="text-[11px] font-bold uppercase tracking-wider text-base-content/90 flex items-center justify-between">
+            <div class="flex items-center space-x-1.5">
+              <span>Raw Data Fields to Populate (<%= raw_fields.size %>)</span>
+              <span class="badge badge-xs font-mono text-[9px]" style="background-color: #18181b !important; color: #ffffff !important;">Source Data</span>
+            </div>
+            <span class="text-[10px] text-base-content/70 lowercase font-medium">from IC, notes, IMEI & calculator</span>
           </div>
 
-          <div class="max-h-72 overflow-y-auto pr-1 space-y-1.5 scrollbar-thin">
-            <% data_fields.each_with_index do |f, idx| %>
+          <div class="max-h-60 overflow-y-auto pr-1 space-y-1.5 scrollbar-thin">
+            <% raw_fields.each_with_index do |f, idx| %>
               <% sub = submitters.find { |s| s['uuid'] == f['submitter_uuid'] } %>
-              <% en_trans = translations[f['name']] %>
+              <% field_name = f['name'].presence || "Raw Field #{idx + 1}" %>
+              <% en_trans = AiSubmissionExtractor.translation_for(f['name'], f['type']) %>
               <div class="flex items-center justify-between text-xs py-2 px-3 bg-base-100 rounded-xl border border-base-200/80 hover:border-neutral-900 transition-all shadow-2xs">
                 <div class="flex items-center space-x-1.5 min-w-0 flex-wrap">
-                  <span class="text-[11px] font-mono text-base-content/40 w-4 text-right"><%= idx + 1 %>.</span>
-                  <span class="font-semibold text-base-content truncate"><%= f['name'] %></span>
+                  <span class="text-[11px] font-mono text-neutral-500 font-bold w-4 text-right"><%= idx + 1 %>.</span>
+                  <span class="font-semibold text-base-content truncate"><%= field_name %></span>
                   <% if en_trans.present? %>
-                    <span class="text-[11px] text-base-content/50 font-normal italic">(<%= en_trans %>)</span>
+                    <span class="text-[11px] text-neutral-700 font-medium italic">(<%= en_trans %>)</span>
                   <% end %>
                   <% if f['required'] %>
                     <span class="text-error font-bold text-sm leading-none" title="Required field">*</span>
                   <% end %>
                 </div>
                 <div class="flex items-center space-x-1.5 flex-shrink-0 ml-2">
-                  <span class="badge badge-xs badge-ghost text-[10px] uppercase font-mono"><%= f['type'] || 'text' %></span>
+                  <span class="badge badge-xs text-[10px] uppercase font-mono" style="background-color: #f4f4f5 !important; color: #18181b !important; border: 1px solid #e4e4e7 !important;"><%= f['type'] || 'text' %></span>
                   <% if sub %>
-                    <span class="badge badge-xs badge-outline text-[10px] max-w-[120px] truncate"><%= sub['name'] %></span>
+                    <span class="badge badge-xs text-[10px] max-w-[120px] truncate" style="background-color: #ffffff !important; color: #18181b !important; border: 1px solid #a1a1aa !important;"><%= sub['name'] %></span>
                   <% end %>
                 </div>
               </div>
@@ -97,31 +77,83 @@
           </div>
         </div>
 
-        <!-- Section 2: Signature Fields -->
-        <% if signatures.present? %>
+        <!-- Section 2: Processed Data Fields -->
+        <% if processed_fields.present? %>
           <div class="pt-2 border-t border-base-300 space-y-1.5">
-            <div class="text-[11px] font-bold uppercase tracking-wider text-base-content/70 flex items-center justify-between">
-              <span>Signature Fields (<%= signatures.size %>)</span>
+            <div class="text-[11px] font-bold uppercase tracking-wider text-base-content/90 flex items-center justify-between">
+              <div class="flex items-center space-x-1.5">
+                <span>Processed Data Fields to Populate (<%= processed_fields.size %>)</span>
+                <span class="badge badge-xs font-mono text-[9px]" style="background-color: #3f3f46 !important; color: #ffffff !important;">Dates & Orders</span>
+              </div>
+              <span class="text-[10px] text-base-content/70 lowercase font-medium">all dates & order number</span>
             </div>
 
-            <div class="space-y-1.5">
-              <% signatures.each_with_index do |f, idx| %>
+            <div class="max-h-60 overflow-y-auto pr-1 space-y-1.5 scrollbar-thin">
+              <% peek_order = DailyOrderSequence.peek_order_number(template.account) %>
+              <% processed_fields.each_with_index do |f, idx| %>
                 <% sub = submitters.find { |s| s['uuid'] == f['submitter_uuid'] } %>
-                <% en_trans = translations[f['name']] %>
-                <div class="flex items-center justify-between text-xs py-2 px-3 bg-base-100 rounded-xl border border-dashed border-neutral-400 transition-all shadow-2xs">
+                <% field_name = f['name'].presence || "Processed Field #{idx + 1}" %>
+                <% en_trans = AiSubmissionExtractor.translation_for(f['name'], f['type']) %>
+                <% auto_preview = AiSubmissionExtractor.processed_data_value(f['name'], f['type'], order_number: peek_order) %>
+                <div class="flex items-center justify-between text-xs py-2 px-3 bg-base-100 rounded-xl border border-base-200/80 hover:border-neutral-900 transition-all shadow-2xs">
                   <div class="flex items-center space-x-1.5 min-w-0 flex-wrap">
-                    <span class="font-semibold text-base-content truncate"><%= f['name'] %></span>
+                    <span class="text-[11px] font-mono text-neutral-500 font-bold w-4 text-right"><%= idx + 1 %>.</span>
+                    <span class="font-semibold text-base-content truncate"><%= field_name %></span>
                     <% if en_trans.present? %>
-                      <span class="text-[11px] text-base-content/50 font-normal italic">(<%= en_trans %>)</span>
+                      <span class="text-[11px] text-neutral-700 font-medium italic">(<%= en_trans %>)</span>
                     <% end %>
                     <% if f['required'] %>
                       <span class="text-error font-bold text-sm leading-none" title="Required field">*</span>
                     <% end %>
                   </div>
                   <div class="flex items-center space-x-1.5 flex-shrink-0 ml-2">
-                    <span class="badge badge-xs badge-neutral text-[10px] uppercase font-mono">SIGNATURE</span>
+                    <% if auto_preview.present? %>
+                      <span class="badge badge-xs font-mono text-[9px] text-neutral-800 bg-neutral-200 border-neutral-300">Auto: <%= auto_preview %></span>
+                    <% end %>
+                    <span class="badge badge-xs text-[10px] uppercase font-mono" style="background-color: #f4f4f5 !important; color: #18181b !important; border: 1px solid #e4e4e7 !important;"><%= f['type'] || 'text' %></span>
                     <% if sub %>
-                      <span class="badge badge-xs badge-outline text-[10px] max-w-[120px] truncate"><%= sub['name'] %></span>
+                      <span class="badge badge-xs text-[10px] max-w-[120px] truncate" style="background-color: #ffffff !important; color: #18181b !important; border: 1px solid #a1a1aa !important;"><%= sub['name'] %></span>
+                    <% end %>
+                  </div>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+
+        <!-- Section 3: Signature Fields -->
+        <% if signatures.present? %>
+          <div class="pt-2 border-t border-base-300 space-y-1.5">
+            <div class="text-[11px] font-bold uppercase tracking-wider text-base-content/90 flex items-center justify-between">
+              <div class="flex items-center space-x-1.5">
+                <span>Signature Fields (<%= signatures.size %>)</span>
+                <span class="badge badge-xs text-[9px] uppercase font-mono" style="background-color: #ffffff !important; color: #18181b !important; border: 1px solid #71717a !important;">Sign-off</span>
+              </div>
+              <span class="text-[10px] text-base-content/70 lowercase font-medium">recipient online signature</span>
+            </div>
+
+            <div class="space-y-1.5">
+              <% signatures.each_with_index do |f, idx| %>
+                <% sub = submitters.find { |s| s['uuid'] == f['submitter_uuid'] } %>
+                <% page_num = f['areas']&.first&.dig('page') || f['areas']&.first&.dig(:page) %>
+                <% page_str = page_num.present? ? " (Page #{page_num.to_i + 1})" : (signatures.size > 1 ? " #{idx + 1}" : "") %>
+                <% sig_name = f['name'].presence || "Tandatangan Penerima#{page_str}" %>
+                <% en_trans = AiSubmissionExtractor.translation_for(f['name'].presence || 'Tandatangan Penerima', 'signature') %>
+                <div class="flex items-center justify-between text-xs py-2 px-3 bg-base-100 rounded-xl border border-dashed border-neutral-400 transition-all shadow-2xs">
+                  <div class="flex items-center space-x-1.5 min-w-0 flex-wrap">
+                    <span class="text-[11px] font-mono text-neutral-500 font-bold w-4 text-right"><%= idx + 1 %>.</span>
+                    <span class="font-semibold text-base-content truncate"><%= sig_name %></span>
+                    <% if en_trans.present? %>
+                      <span class="text-[11px] text-neutral-700 font-medium italic">(<%= en_trans %>)</span>
+                    <% end %>
+                    <% if f['required'] %>
+                      <span class="text-error font-bold text-sm leading-none" title="Required field">*</span>
+                    <% end %>
+                  </div>
+                  <div class="flex items-center space-x-1.5 flex-shrink-0 ml-2">
+                    <span class="badge badge-xs text-[10px] uppercase font-mono" style="background-color: #18181b !important; color: #ffffff !important;">SIGNATURE</span>
+                    <% if sub %>
+                      <span class="badge badge-xs text-[10px] max-w-[120px] truncate" style="background-color: #ffffff !important; color: #18181b !important; border: 1px solid #a1a1aa !important;"><%= sub['name'] %></span>
                     <% end %>
                   </div>
                 </div>

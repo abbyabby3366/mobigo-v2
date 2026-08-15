@@ -21,8 +21,8 @@
       </div>
     </div>
     <div class="flex items-center space-x-2">
-      <span class="badge badge-neutral text-xs font-mono py-3 px-3">Gemini 3.6 Flash</span>
-      <span class="badge badge-outline text-xs py-3 px-3">Multimodal OCR & Vision</span>
+      <span class="badge text-xs font-mono py-3 px-3 shadow-2xs" style="background-color: #18181b !important; color: #ffffff !important; border: 1px solid #18181b !important;">Gemini 3.6 Flash</span>
+      <span class="badge text-xs py-3 px-3 shadow-2xs" style="background-color: #ffffff !important; color: #18181b !important; border: 1px solid #71717a !important;">Multimodal OCR & Vision</span>
     </div>
   </div>
 
@@ -75,7 +75,7 @@
                     <%= svg_icon('sparkles', class: 'w-3.5 h-3.5 stroke-2') %>
                   </div>
                   <span class="font-bold text-xs uppercase tracking-wider text-base-content/80">AI System Prompt & Rules</span>
-                  <span class="badge badge-xs badge-neutral font-mono text-[9px]">Gemini 3.6 Flash</span>
+                  <span class="badge badge-xs font-mono text-[9px]" style="background-color: #18181b !important; color: #ffffff !important;">Gemini 3.6 Flash</span>
                 </div>
                 <div class="flex items-center space-x-2">
                   <span class="text-[11px] text-base-content/50 group-open:hidden">View Prompt</span>
@@ -88,15 +88,18 @@
 
               <div class="p-3.5 pt-2 border-t border-base-300 space-y-2.5">
                 <div class="flex items-center justify-between">
-                  <span class="text-[11px] text-base-content/60">Instructions & extraction rules sent with every request:</span>
-                  <button type="button" data-action="copy-prompt" id="copy_prompt_btn" class="btn btn-xs !bg-neutral-800 hover:!bg-black !text-white !border-neutral-800 text-[10px] !rounded-lg gap-1 font-medium cursor-pointer">
+                  <span class="text-[11px] text-base-content/80 font-medium">Instructions & extraction rules sent with every request:</span>
+                  <button type="button" data-action="copy-prompt" id="copy_prompt_btn" class="btn btn-xs text-[10px] !rounded-lg gap-1 font-bold cursor-pointer shadow-xs" style="background-color: #18181b !important; color: #ffffff !important; border: 1px solid #18181b !important;">
                     <%= svg_icon('clipboard_copy', class: 'w-3 h-3 text-white') %>
-                    <span id="copy_prompt_label" class="text-white">Copy Prompt</span>
+                    <span id="copy_prompt_label" class="font-bold text-white" style="color: #ffffff !important;">Copy Prompt</span>
                   </button>
                 </div>
-                <pre id="system_prompt_pre" class="p-3 bg-neutral text-neutral-content text-[11px] font-mono rounded-xl overflow-x-auto max-h-72 leading-relaxed select-all whitespace-pre-wrap shadow-inner">You are an expert AI document processing assistant specializing in extracting and populating form fields for contracts, equipment/phone rental agreements (e.g. PERJANJIAN PERKHIDMATAN SEWA, Mobigo), customer identity documents (e.g. Malaysian MyKad / Kad Pengenalan), calculator screenshots, device box labels (IMEI, Serial Number), and customer WhatsApp/order notes.
+                <pre id="system_prompt_pre" class="p-3 bg-neutral text-neutral-content text-[11px] font-mono rounded-xl overflow-x-auto max-h-72 leading-relaxed select-all whitespace-pre-wrap shadow-inner">You are an expert AI document processing assistant specializing in extracting structured RAW DATA from customer identity documents (e.g. Malaysian MyKad / Kad Pengenalan), calculator screenshots, device box labels (IMEI, Serial Number), and customer WhatsApp/order notes for equipment/phone rental agreements.
 
-DOMAIN-SPECIFIC EXTRACTION RULES & FIELD MAPPING GUIDANCE:
+CRITICAL INSTRUCTION:
+Extract ONLY RAW DATA fields (Customer Identity, Device Model, IMEI/Serial Number, Deposit Amount, Monthly Rent, Product Price, Duration). DO NOT extract, calculate, or include PROCESSED fields (such as Order Number, Date fields, or Jumlah Sewa) or Signatures.
+
+RAW DATA EXTRACTION RULES:
 1. Contact & Identity Information:
    - Customer / Recipient Full Name ("Nama", "Nama Penerima", "Pihak B", "Name"): Extract from MyKad IC photo or text notes.
    - IC / Identity Card Number ("No. Kad Pengenalan", "No. KP", "IC", "NRIC"): Extract from MyKad image (e.g. 890425-02-5957).
@@ -105,26 +108,18 @@ DOMAIN-SPECIFIC EXTRACTION RULES & FIELD MAPPING GUIDANCE:
    - Address ("Alamat", "Alamat Penghantaran", "Address"): Extract full residential or delivery address.
 
 2. Device & Product Information:
-   - Product Name / Model ("Nama Produk", "Model", "Device Model"): Extract phone model and capacity.
-   - IMEI / Serial Number ("Nombor IMEI Telefon/ Siri Telefon", "IMEI", "Serial No"): Extract from box label.
+   - Product Name / Model ("Nama Produk", "Model", "Device Model"): Extract phone model and capacity from text or box image.
+   - IMEI / Serial Number ("Nombor IMEI Telefon/ Siri Telefon", "IMEI", "Serial No"): Extract from device box label.
    - Quantity ("Kuantiti Peralatan", "Quantity"): Usually "1".
 
-3. Rental, Pricing & Calculator Information:
-   - Order Number ("Nombor Pesanan", "Order Number"): Extract from order text/title.
-   - Retail Price ("Harga Pasaran/Harga Produk", "Harga Pasaran"): Extract from calculator screenshot.
-   - Deposit ("Deposit Produk", "Deposit Amount"): Extract from calculator screenshot.
-   - Monthly Rent ("Harga Sewa Sebulan", "Monthly Rent"): Extract from calculator screenshot.
-   - Total Rent ("Jumlah Sewa", "Total Rent"): Calculate or extract total rent across all periods.
-   - Duration / Period ("Jumlah Tempoh Sewaan", "Period"): Extract from calculator (e.g. "13 Period").
-   - Start Date ("Tarikh mula sewaan"): Reference date or payment date.
-   - End Date ("Tarikh akhir sewaan"): Start date + period duration.
+3. Rental Pricing & Calculator Screenshots:
+   - Retail / Product Price ("Harga Produk", "Harga Pasaran", "Retail Price"): Extract pure numeric price (e.g. top price box "6500" or "Retail Price: RM 6500").
+   - Deposit Amount ("Deposit Produk", "Deposit Amount", "Deposit"): Extract pure numeric deposit (e.g. "Deposit Amount" box "1950").
+   - Monthly Rent ("Harga Sewa Sebulan", "Monthly Rent", "Rent"): Extract monthly rental amount from table "Rent" column / Period rows (e.g. "758.33").
+   - Note: "Jumlah Sewa" is a system processed field automatically calculated as (Harga Produk - Deposit Produk).
 
-4. Agreement Header & Split Date Fields:
-   - If template has separate boxes for Day, Month, and Year, fill with reference date parts.
-   - "Tarikh Penerimaan": Fill with current date (YYYY-MM-DD or DD-MM-YYYY).
-
-5. Response Format:
-   - Valid JSON object containing "summary", "submitters", and "fields" (clean English keys).</pre>
+4. Response Format:
+   - Valid JSON object containing "summary", "submitters", and "fields" (RAW data fields only).</pre>
               </div>
             </details>
           </div>
@@ -169,7 +164,7 @@ DOMAIN-SPECIFIC EXTRACTION RULES & FIELD MAPPING GUIDANCE:
             <label class="block text-xs font-bold text-base-content/80 mb-1">
               Upload Images & PDF Documents
             </label>
-            <input type="file" id="ai_file_input" multiple accept="image/*,application/pdf" class="hidden" onchange="handleFileSelect(this.files)">
+            <input type="file" id="ai_file_input" multiple accept=".pdf,application/pdf,image/*,.png,.jpg,.jpeg,.webp" class="hidden" onchange="handleFileSelect(this.files)">
             <label for="ai_file_input" id="ai_file_dropzone" class="border-2 border-dashed border-neutral-400 hover:border-neutral-900 bg-base-200/50 hover:bg-base-200 rounded-2xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center space-y-2 block">
               <div class="p-3 bg-neutral-900 text-white rounded-2xl shadow-sm flex items-center justify-center pointer-events-none">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -226,6 +221,20 @@ DOMAIN-SPECIFIC EXTRACTION RULES & FIELD MAPPING GUIDANCE:
 
 <script nonce="<%= content_security_policy_nonce %>">
   window.aiSelectedFiles = [];
+
+  window.recalculateJumlahSewa = function() {
+    const hpInput = document.querySelector('input[data-field-name="Harga Produk"], input[data-field-name="Harga Pasaran/Harga Produk"], input[data-field-name="Harga Pasaran"]');
+    const dpInput = document.querySelector('input[data-field-name="Deposit Produk"], input[data-field-name="Deposit"]');
+    const jsInput = document.querySelector('input[data-field-name="Jumlah Sewa"], input[data-field-name="Jumlah Sewaan"]');
+    if (hpInput && dpInput && jsInput) {
+      const hp = parseFloat(hpInput.value.replace(/[^0-9.]/g, '')) || 0;
+      const dp = parseFloat(dpInput.value.replace(/[^0-9.]/g, '')) || 0;
+      if (hp > 0) {
+        const diff = hp - dp;
+        jsInput.value = (diff % 1 === 0) ? diff.toString() : diff.toFixed(2);
+      }
+    }
+  };
 
   window.onTemplateChange = function(templateId) {
     if (!templateId) return;
@@ -299,7 +308,7 @@ DOMAIN-SPECIFIC EXTRACTION RULES & FIELD MAPPING GUIDANCE:
     });
   }
 
-  // Paste from Clipboard functionality (Supports both Text and Images)
+  // Paste from Clipboard functionality (Supports Text, Images, and PDF Files)
   window.pasteFromClipboard = async function() {
     const label = document.getElementById('paste_clipboard_label');
     const textarea = document.getElementById('ai_text_input');
@@ -307,103 +316,165 @@ DOMAIN-SPECIFIC EXTRACTION RULES & FIELD MAPPING GUIDANCE:
     try {
       let pastedSomething = false;
 
-      // Try reading items (images and rich clipboard)
+      // Try reading rich clipboard items (images, PDFs, blobs)
       if (navigator.clipboard && navigator.clipboard.read) {
         try {
           const items = await navigator.clipboard.read();
           for (const item of items) {
             for (const type of item.types) {
-              if (type.startsWith('image/')) {
+              if (type.startsWith('image/') || type.includes('pdf') || type === 'application/pdf') {
                 const blob = await item.getType(type);
-                const ext = type.split('/')[1] || 'png';
-                const file = new File([blob], `clipboard_image_${Date.now()}.${ext}`, { type });
+                const isPdf = type.includes('pdf') || type === 'application/pdf';
+                const ext = isPdf ? 'pdf' : (type.split('/')[1] || 'png');
+                const file = new File([blob], `pasted_document_${Date.now()}.${ext}`, { type: isPdf ? 'application/pdf' : type });
                 window.aiSelectedFiles.push(file);
                 pastedSomething = true;
               }
             }
           }
         } catch (e) {
-          // Fall back to readText if read() fails
+          console.warn('Rich clipboard read not permitted or empty:', e);
         }
       }
 
-      // Try reading text
+      // Try reading text from clipboard
       if (navigator.clipboard && navigator.clipboard.readText) {
-        const text = await navigator.clipboard.readText();
-        if (text && text.trim().length > 0) {
-          if (textarea.value && textarea.value.trim().length > 0) {
-            textarea.value += '\n' + text.trim();
-          } else {
-            textarea.value = text.trim();
+        try {
+          const text = await navigator.clipboard.readText();
+          if (text && text.trim().length > 0) {
+            if (textarea) {
+              if (textarea.value && textarea.value.trim().length > 0) {
+                textarea.value += '\n' + text.trim();
+              } else {
+                textarea.value = text.trim();
+              }
+            }
+            pastedSomething = true;
           }
-          pastedSomething = true;
+        } catch (e) {
+          console.warn('Text clipboard read not permitted:', e);
         }
       }
 
       if (pastedSomething) {
         renderSelectedFiles();
         if (label) {
-          label.textContent = 'Pasted!';
+          label.textContent = 'Pasted successfully!';
           setTimeout(() => { label.textContent = 'Paste from Clipboard'; }, 2000);
         }
       } else {
         if (label) {
-          label.textContent = 'Clipboard is empty';
-          setTimeout(() => { label.textContent = 'Paste from Clipboard'; }, 2000);
+          label.textContent = 'Clipboard is empty or unsupported';
+          setTimeout(() => { label.textContent = 'Paste from Clipboard'; }, 2500);
         }
       }
     } catch (err) {
       if (label) {
-        label.textContent = 'Paste failed';
-        setTimeout(() => { label.textContent = 'Paste from Clipboard'; }, 2000);
+        label.textContent = 'Paste failed: ' + err.message;
+        setTimeout(() => { label.textContent = 'Paste from Clipboard'; }, 2500);
       }
     }
   };
 
-  // Global Paste (Ctrl+V / Cmd+V) on page
+  // Global Paste (Ctrl+V / Cmd+V) on page for Files (PDF, Images) and Text
   document.addEventListener('paste', function(e) {
     const wizard = document.getElementById('ai_submission_wizard');
     if (!wizard) return;
 
-    const items = (e.clipboardData || e.originalEvent?.clipboardData)?.items;
-    if (!items) return;
+    const clipboardData = e.clipboardData || e.originalEvent?.clipboardData;
+    if (!clipboardData) return;
 
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf('image') !== -1) {
-        const file = items[i].getAsFile();
-        if (file) {
+    let addedFile = false;
+
+    // 1. Check direct file list (when user copied a file from File Explorer or Finder)
+    const files = clipboardData.files;
+    if (files && files.length > 0) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type.includes('pdf');
+        const isImg = file.type.startsWith('image/') || file.name.toLowerCase().match(/\.(png|jpe?g|webp|gif|bmp)$/);
+        if (isPdf || isImg) {
           window.aiSelectedFiles.push(file);
-          renderSelectedFiles();
+          addedFile = true;
         }
+      }
+    }
+
+    // 2. Check clipboard items (when user copied image data or document blob)
+    if (!addedFile) {
+      const items = clipboardData.items;
+      if (items && items.length > 0) {
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item.kind === 'file') {
+            const file = item.getAsFile();
+            if (file) {
+              const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type.includes('pdf') || item.type.includes('pdf');
+              const isImg = file.type.startsWith('image/') || item.type.startsWith('image/');
+              if (isPdf || isImg) {
+                window.aiSelectedFiles.push(file);
+                addedFile = true;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (addedFile) {
+      e.preventDefault();
+      renderSelectedFiles();
+      return;
+    }
+
+    // 3. If user pasted plain text outside the textarea, insert into text box
+    const activeEl = document.activeElement;
+    const textarea = document.getElementById('ai_text_input');
+    if (textarea && activeEl !== textarea && activeEl?.tagName !== 'INPUT' && activeEl?.tagName !== 'TEXTAREA') {
+      const text = clipboardData.getData('text');
+      if (text && text.trim().length > 0) {
+        e.preventDefault();
+        if (textarea.value && textarea.value.trim().length > 0) {
+          textarea.value += '\n' + text.trim();
+        } else {
+          textarea.value = text.trim();
+        }
+        textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }
   });
 
-  // Drag & Drop handling
+  // Drag & Drop handling (on Dropzone and Wizard Container)
   const dropzone = document.getElementById('ai_file_dropzone');
-  if (dropzone) {
+  const wizardCard = document.getElementById('ai_setup_grid');
+
+  [dropzone, wizardCard].filter(Boolean).forEach(el => {
     ['dragenter', 'dragover'].forEach(eventName => {
-      dropzone.addEventListener(eventName, (e) => {
+      el.addEventListener(eventName, (e) => {
         e.preventDefault();
         e.stopPropagation();
-        dropzone.classList.add('border-neutral-900', 'bg-base-200');
+        if (dropzone) dropzone.classList.add('border-neutral-900', 'bg-base-200');
       }, false);
     });
 
     ['dragleave', 'drop'].forEach(eventName => {
-      dropzone.addEventListener(eventName, (e) => {
+      el.addEventListener(eventName, (e) => {
         e.preventDefault();
         e.stopPropagation();
-        dropzone.classList.remove('border-neutral-900', 'bg-base-200');
+        if (dropzone) dropzone.classList.remove('border-neutral-900', 'bg-base-200');
       }, false);
     });
 
-    dropzone.addEventListener('drop', (e) => {
+    el.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       const dt = e.dataTransfer;
-      const files = dt.files;
-      handleFileSelect(files);
+      const files = dt ? dt.files : null;
+      if (files && files.length > 0) {
+        handleFileSelect(files);
+      }
     }, false);
-  }
+  });
 
   window.startAiExtraction = function() {
     const templateSelect = document.getElementById('ai_template_select');
