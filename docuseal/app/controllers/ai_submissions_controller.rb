@@ -2,6 +2,7 @@
 
 class AiSubmissionsController < ApplicationController
   skip_before_action :verify_authenticity_token, only: :extract
+  before_action :set_csp
   before_action :authenticate_user!
   before_action -> { authorize!(:create, Submission) }
   before_action :load_template, only: %i[template_fields extract create]

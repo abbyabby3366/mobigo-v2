@@ -15,7 +15,7 @@
       <%= render 'shared/search_input' %>
     <% end %>
     <% if can?(:create, Submission) %>
-      <%= link_to new_ai_submission_path, id: 'create_ai_submission_button', class: 'btn btn-neutral gap-2 !bg-neutral-900 hover:!bg-black !text-white !border-neutral-900 shadow-sm hover:shadow-md transition-all !h-10 !min-h-[40px] px-3.5 !rounded-xl flex items-center' do %>
+      <%= link_to new_ai_submission_path, id: 'create_ai_submission_button', data: { turbo: false }, class: 'btn btn-neutral gap-2 !bg-neutral-900 hover:!bg-black !text-white !border-neutral-900 shadow-sm hover:shadow-md transition-all !h-10 !min-h-[40px] px-3.5 !rounded-xl flex items-center' do %>
         <%= svg_icon('sparkles', class: 'w-5 h-5 stroke-2 text-yellow-400') %>
         <span class="font-semibold text-sm tracking-wide text-white"><%= t('create_with_ai', default: 'Create with AI') %></span>
       <% end %>

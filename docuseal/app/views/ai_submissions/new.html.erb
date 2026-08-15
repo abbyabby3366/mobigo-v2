@@ -1,9 +1,13 @@
+<% content_for :head do %>
+  <meta name="turbo-visit-control" content="reload">
+<% end %>
+
 <div class="space-y-6 max-w-5xl mx-auto py-2">
   <!-- Back Link & Page Header -->
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-base-300">
     <div>
       <div class="flex items-center space-x-2 text-xs text-base-content/60 mb-1">
-        <%= link_to submissions_path, class: 'hover:text-primary flex items-center space-x-1 font-medium' do %>
+        <%= link_to submissions_path, data: { turbo: false }, class: 'hover:text-primary flex items-center space-x-1 font-medium' do %>
           <%= svg_icon('arrow_left', class: 'w-3.5 h-3.5') %>
           <span>Submissions</span>
         <% end %>
@@ -166,8 +170,8 @@ RAW DATA EXTRACTION RULES:
             </label>
             <input type="file" id="ai_file_input" multiple accept=".pdf,application/pdf,image/*,.png,.jpg,.jpeg,.webp" class="hidden" onchange="handleFileSelect(this.files)">
             <label for="ai_file_input" id="ai_file_dropzone" class="border-2 border-dashed border-neutral-400 hover:border-neutral-900 bg-base-200/50 hover:bg-base-200 rounded-2xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center space-y-2 block">
-              <div class="p-3 bg-neutral-900 text-white rounded-2xl shadow-sm flex items-center justify-center pointer-events-none">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <div class="p-3.5 rounded-2xl shadow-2xs flex items-center justify-center pointer-events-none" style="background-color: #f4f4f5 !important; border: 1px solid #e4e4e7 !important;">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" style="color: #18181b !important; stroke: #18181b !important;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                 </svg>
               </div>
@@ -220,7 +224,7 @@ RAW DATA EXTRACTION RULES:
 </div>
 
 <script nonce="<%= content_security_policy_nonce %>">
-  window.aiSelectedFiles = [];
+  window.aiSelectedFiles = window.aiSelectedFiles || [];
 
   window.recalculateJumlahSewa = function() {
     const hpInput = document.querySelector('input[data-field-name="Harga Produk"], input[data-field-name="Harga Pasaran/Harga Produk"], input[data-field-name="Harga Pasaran"]');
@@ -239,6 +243,7 @@ RAW DATA EXTRACTION RULES:
   window.onTemplateChange = function(templateId) {
     if (!templateId) return;
     const container = document.getElementById('template_fields_container');
+    if (!container) return;
     container.innerHTML = '<div class="text-xs text-base-content/50 py-3 text-center animate-pulse">Loading template fields...</div>';
 
     fetch(`/ai_submissions/template_fields?template_id=${templateId}`, {
@@ -258,22 +263,22 @@ RAW DATA EXTRACTION RULES:
     for (let i = 0; i < files.length; i++) {
       window.aiSelectedFiles.push(files[i]);
     }
-    renderSelectedFiles();
+    window.renderSelectedFiles();
   };
 
   window.removeSelectedFile = function(idx) {
     window.aiSelectedFiles.splice(idx, 1);
-    renderSelectedFiles();
+    window.renderSelectedFiles();
   };
 
   window.clearSelectedFiles = function() {
     window.aiSelectedFiles = [];
     const fileInput = document.getElementById('ai_file_input');
     if (fileInput) fileInput.value = '';
-    renderSelectedFiles();
+    window.renderSelectedFiles();
   };
 
-  function renderSelectedFiles() {
+  window.renderSelectedFiles = function() {
     const container = document.getElementById('ai_files_badge_container');
     const listWrapper = document.getElementById('ai_selected_files_list');
     const countSpan = document.getElementById('ai_file_count');
@@ -306,7 +311,7 @@ RAW DATA EXTRACTION RULES:
       `;
       container.appendChild(item);
     });
-  }
+  };
 
   // Paste from Clipboard functionality (Supports Text, Images, and PDF Files)
   window.pasteFromClipboard = async function() {
@@ -316,7 +321,7 @@ RAW DATA EXTRACTION RULES:
     try {
       let pastedSomething = false;
 
-      // Try reading rich clipboard items (images, PDFs, blobs)
+      // 1. Try reading rich clipboard items (images, PDFs, blobs)
       if (navigator.clipboard && navigator.clipboard.read) {
         try {
           const items = await navigator.clipboard.read();
@@ -337,7 +342,7 @@ RAW DATA EXTRACTION RULES:
         }
       }
 
-      // Try reading text from clipboard
+      // 2. Try reading text from clipboard
       if (navigator.clipboard && navigator.clipboard.readText) {
         try {
           const text = await navigator.clipboard.readText();
@@ -357,7 +362,7 @@ RAW DATA EXTRACTION RULES:
       }
 
       if (pastedSomething) {
-        renderSelectedFiles();
+        window.renderSelectedFiles();
         if (label) {
           label.textContent = 'Pasted successfully!';
           setTimeout(() => { label.textContent = 'Paste from Clipboard'; }, 2000);
@@ -376,106 +381,6 @@ RAW DATA EXTRACTION RULES:
     }
   };
 
-  // Global Paste (Ctrl+V / Cmd+V) on page for Files (PDF, Images) and Text
-  document.addEventListener('paste', function(e) {
-    const wizard = document.getElementById('ai_submission_wizard');
-    if (!wizard) return;
-
-    const clipboardData = e.clipboardData || e.originalEvent?.clipboardData;
-    if (!clipboardData) return;
-
-    let addedFile = false;
-
-    // 1. Check direct file list (when user copied a file from File Explorer or Finder)
-    const files = clipboardData.files;
-    if (files && files.length > 0) {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type.includes('pdf');
-        const isImg = file.type.startsWith('image/') || file.name.toLowerCase().match(/\.(png|jpe?g|webp|gif|bmp)$/);
-        if (isPdf || isImg) {
-          window.aiSelectedFiles.push(file);
-          addedFile = true;
-        }
-      }
-    }
-
-    // 2. Check clipboard items (when user copied image data or document blob)
-    if (!addedFile) {
-      const items = clipboardData.items;
-      if (items && items.length > 0) {
-        for (let i = 0; i < items.length; i++) {
-          const item = items[i];
-          if (item.kind === 'file') {
-            const file = item.getAsFile();
-            if (file) {
-              const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type.includes('pdf') || item.type.includes('pdf');
-              const isImg = file.type.startsWith('image/') || item.type.startsWith('image/');
-              if (isPdf || isImg) {
-                window.aiSelectedFiles.push(file);
-                addedFile = true;
-              }
-            }
-          }
-        }
-      }
-    }
-
-    if (addedFile) {
-      e.preventDefault();
-      renderSelectedFiles();
-      return;
-    }
-
-    // 3. If user pasted plain text outside the textarea, insert into text box
-    const activeEl = document.activeElement;
-    const textarea = document.getElementById('ai_text_input');
-    if (textarea && activeEl !== textarea && activeEl?.tagName !== 'INPUT' && activeEl?.tagName !== 'TEXTAREA') {
-      const text = clipboardData.getData('text');
-      if (text && text.trim().length > 0) {
-        e.preventDefault();
-        if (textarea.value && textarea.value.trim().length > 0) {
-          textarea.value += '\n' + text.trim();
-        } else {
-          textarea.value = text.trim();
-        }
-        textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }
-  });
-
-  // Drag & Drop handling (on Dropzone and Wizard Container)
-  const dropzone = document.getElementById('ai_file_dropzone');
-  const wizardCard = document.getElementById('ai_setup_grid');
-
-  [dropzone, wizardCard].filter(Boolean).forEach(el => {
-    ['dragenter', 'dragover'].forEach(eventName => {
-      el.addEventListener(eventName, (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (dropzone) dropzone.classList.add('border-neutral-900', 'bg-base-200');
-      }, false);
-    });
-
-    ['dragleave', 'drop'].forEach(eventName => {
-      el.addEventListener(eventName, (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (dropzone) dropzone.classList.remove('border-neutral-900', 'bg-base-200');
-      }, false);
-    });
-
-    el.addEventListener('drop', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const dt = e.dataTransfer;
-      const files = dt ? dt.files : null;
-      if (files && files.length > 0) {
-        handleFileSelect(files);
-      }
-    }, false);
-  });
-
   window.startAiExtraction = function() {
     const templateSelect = document.getElementById('ai_template_select');
     const templateId = templateSelect ? templateSelect.value : null;
@@ -486,18 +391,24 @@ RAW DATA EXTRACTION RULES:
     const loadingState = document.getElementById('ai_loading_state');
     const resultsContainer = document.getElementById('ai_extraction_results');
 
-    errorDiv.classList.add('hidden');
-    errorDiv.textContent = '';
+    if (errorDiv) {
+      errorDiv.classList.add('hidden');
+      errorDiv.textContent = '';
+    }
 
     if (!templateId) {
-      errorDiv.textContent = 'Please select a document template.';
-      errorDiv.classList.remove('hidden');
+      if (errorDiv) {
+        errorDiv.textContent = 'Please select a document template.';
+        errorDiv.classList.remove('hidden');
+      }
       return;
     }
 
     if (!text && window.aiSelectedFiles.length === 0) {
-      errorDiv.textContent = 'Please provide some text or upload at least one image or PDF document.';
-      errorDiv.classList.remove('hidden');
+      if (errorDiv) {
+        errorDiv.textContent = 'Please provide some text or upload at least one image or PDF document.';
+        errorDiv.classList.remove('hidden');
+      }
       return;
     }
 
@@ -509,12 +420,11 @@ RAW DATA EXTRACTION RULES:
       formData.append('files[]', file);
     });
 
-
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
     if (uploadSection) uploadSection.classList.add('hidden');
-    loadingState.classList.remove('hidden');
-    resultsContainer.classList.add('hidden');
+    if (loadingState) loadingState.classList.remove('hidden');
+    if (resultsContainer) resultsContainer.classList.add('hidden');
 
     fetch('/ai_submissions/extract', {
       method: 'POST',
@@ -532,34 +442,19 @@ RAW DATA EXTRACTION RULES:
       return res.text();
     })
     .then(html => {
-      loadingState.classList.add('hidden');
-      resultsContainer.innerHTML = html;
-      resultsContainer.classList.remove('hidden');
-
-      // Bind tab and copy listeners to newly inserted elements
-      const formBtn = document.getElementById('tab_btn_form');
-      const jsonBtn = document.getElementById('tab_btn_json');
-      const copyBtn = document.getElementById('copy_json_btn');
-
-      if (formBtn) {
-        formBtn.onclick = function() { window.switchAiTab('form'); };
-        formBtn.addEventListener('click', function() { window.switchAiTab('form'); });
-      }
-      if (jsonBtn) {
-        jsonBtn.onclick = function() { window.switchAiTab('json'); };
-        jsonBtn.addEventListener('click', function() { window.switchAiTab('json'); });
-      }
-      if (copyBtn) {
-        copyBtn.onclick = function() { window.copyExtractedJson(); };
-        copyBtn.addEventListener('click', function() { window.copyExtractedJson(); });
+      if (loadingState) loadingState.classList.add('hidden');
+      if (resultsContainer) {
+        resultsContainer.innerHTML = html;
+        resultsContainer.classList.remove('hidden');
       }
     })
-
     .catch(err => {
-      loadingState.classList.add('hidden');
+      if (loadingState) loadingState.classList.add('hidden');
       if (uploadSection) uploadSection.classList.remove('hidden');
-      errorDiv.textContent = err.message || 'An unexpected error occurred during AI extraction.';
-      errorDiv.classList.remove('hidden');
+      if (errorDiv) {
+        errorDiv.textContent = err.message || 'An unexpected error occurred during AI extraction.';
+        errorDiv.classList.remove('hidden');
+      }
     });
   };
 
@@ -596,116 +491,183 @@ RAW DATA EXTRACTION RULES:
     }
   };
 
-  // Centralized click delegator for all buttons (immune to dynamic HTML insertion)
-  document.addEventListener('click', function(e) {
-    const target = e.target.closest('[data-action], #reupload_btn, #tab_btn_form, #tab_btn_json, #copy_json_btn, #paste_clipboard_btn, #ai_extract_btn');
-    if (!target) return;
+  // Attach global document listeners once across Turbo lifecycle
+  if (!window.__aiWizardListenersAttached) {
+    window.__aiWizardListenersAttached = true;
 
-    const action = target.dataset.action;
-    const id = target.id;
+    // 1. Global Paste (Ctrl+V / Cmd+V) for images, PDFs, and text
+    document.addEventListener('paste', function(e) {
+      const wizard = document.getElementById('ai_submission_wizard');
+      if (!wizard) return;
 
-    if (action === 'reupload' || id === 'reupload_btn') {
-      e.preventDefault();
-      const resultsContainer = document.getElementById('ai_extraction_results');
-      const uploadSection = document.getElementById('ai_setup_grid');
-      if (resultsContainer) resultsContainer.classList.add('hidden');
-      if (uploadSection) uploadSection.classList.remove('hidden');
-    } else if (action === 'switch-tab-form' || id === 'tab_btn_form') {
-      e.preventDefault();
-      window.switchAiTab('form');
-    } else if (action === 'switch-tab-json' || id === 'tab_btn_json') {
-      e.preventDefault();
-      window.switchAiTab('json');
-    } else if (action === 'copy-json' || id === 'copy_json_btn') {
-      e.preventDefault();
-      window.copyExtractedJson();
-    } else if (action === 'paste-clipboard' || id === 'paste_clipboard_btn') {
-      e.preventDefault();
-      window.pasteFromClipboard();
-    } else if (action === 'extract-ai' || id === 'ai_extract_btn') {
-      e.preventDefault();
-      window.startAiExtraction();
-    } else if (action === 'clear-files' || id === 'ai_clear_files_btn') {
-      e.preventDefault();
-      window.clearSelectedFiles();
-    } else if (action === 'remove-file') {
-      e.preventDefault();
-      const idx = parseInt(target.dataset.index, 10);
-      if (!isNaN(idx)) {
-        window.removeSelectedFile(idx);
-      }
-    } else if (action === 'copy-prompt' || id === 'copy_prompt_btn') {
-      e.preventDefault();
-      const promptPre = document.getElementById('system_prompt_pre');
-      const promptLabel = document.getElementById('copy_prompt_label');
-      if (promptPre) {
-        navigator.clipboard.writeText(promptPre.innerText).then(() => {
-          if (promptLabel) {
-            promptLabel.textContent = 'Copied!';
-            setTimeout(() => { promptLabel.textContent = 'Copy Prompt'; }, 2000);
+      const clipboardData = e.clipboardData || e.originalEvent?.clipboardData;
+      if (!clipboardData) return;
+
+      let addedFile = false;
+
+      // Check direct file list
+      const files = clipboardData.files;
+      if (files && files.length > 0) {
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type.includes('pdf');
+          const isImg = file.type.startsWith('image/') || file.name.toLowerCase().match(/\.(png|jpe?g|webp|gif|bmp)$/);
+          if (isPdf || isImg) {
+            window.aiSelectedFiles.push(file);
+            addedFile = true;
           }
-        });
-      }
-    }
-
-
-
-  });
-
-  function initAiSubmissionPage() {
-    const extractBtn = document.getElementById('ai_extract_btn');
-    if (extractBtn && !extractBtn.dataset.bound) {
-      extractBtn.dataset.bound = 'true';
-      extractBtn.addEventListener('click', startAiExtraction);
-    }
-
-    const pasteBtn = document.getElementById('paste_clipboard_btn');
-    if (pasteBtn && !pasteBtn.dataset.bound) {
-      pasteBtn.dataset.bound = 'true';
-      pasteBtn.addEventListener('click', pasteFromClipboard);
-    }
-
-    const fileInput = document.getElementById('ai_file_input');
-    if (fileInput && !fileInput.dataset.bound) {
-      fileInput.dataset.bound = 'true';
-      fileInput.addEventListener('change', function(e) {
-        handleFileSelect(e.target.files);
-      });
-    }
-
-    const dropzone = document.getElementById('ai_file_dropzone');
-    if (dropzone && !dropzone.dataset.bound) {
-      dropzone.dataset.bound = 'true';
-      ['dragenter', 'dragover'].forEach(eventName => {
-        dropzone.addEventListener(eventName, (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          dropzone.classList.add('border-neutral-900', 'bg-base-200');
-        }, false);
-      });
-
-      ['dragleave', 'drop'].forEach(eventName => {
-        dropzone.addEventListener(eventName, (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          dropzone.classList.remove('border-neutral-900', 'bg-base-200');
-        }, false);
-      });
-
-      dropzone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const dt = e.dataTransfer;
-        if (dt && dt.files) {
-          handleFileSelect(dt.files);
         }
-      }, false);
-    }
+      }
+
+      // Check clipboard items
+      if (!addedFile) {
+        const items = clipboardData.items;
+        if (items && items.length > 0) {
+          for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.kind === 'file') {
+              const file = item.getAsFile();
+              if (file) {
+                const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type.includes('pdf') || item.type.includes('pdf');
+                const isImg = file.type.startsWith('image/') || item.type.startsWith('image/');
+                if (isPdf || isImg) {
+                  window.aiSelectedFiles.push(file);
+                  addedFile = true;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (addedFile) {
+        e.preventDefault();
+        window.renderSelectedFiles();
+        return;
+      }
+
+      // Plain text paste outside textarea
+      const activeEl = document.activeElement;
+      const textarea = document.getElementById('ai_text_input');
+      if (textarea && activeEl !== textarea && activeEl?.tagName !== 'INPUT' && activeEl?.tagName !== 'TEXTAREA') {
+        const text = clipboardData.getData('text');
+        if (text && text.trim().length > 0) {
+          e.preventDefault();
+          if (textarea.value && textarea.value.trim().length > 0) {
+            textarea.value += '\n' + text.trim();
+          } else {
+            textarea.value = text.trim();
+          }
+          textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+    });
+
+    // 2. Centralized click delegator for all wizard actions
+    document.addEventListener('click', function(e) {
+      const wizard = document.getElementById('ai_submission_wizard');
+      if (!wizard) return;
+
+      const target = e.target.closest('[data-action], #reupload_btn, #tab_btn_form, #tab_btn_json, #copy_json_btn, #paste_clipboard_btn, #ai_extract_btn, #ai_clear_files_btn, #copy_prompt_btn');
+      if (!target) return;
+
+      const action = target.dataset.action;
+      const id = target.id;
+
+      if (action === 'reupload' || id === 'reupload_btn') {
+        e.preventDefault();
+        const resultsContainer = document.getElementById('ai_extraction_results');
+        const uploadSection = document.getElementById('ai_setup_grid');
+        if (resultsContainer) resultsContainer.classList.add('hidden');
+        if (uploadSection) uploadSection.classList.remove('hidden');
+      } else if (action === 'switch-tab-form' || id === 'tab_btn_form') {
+        e.preventDefault();
+        window.switchAiTab('form');
+      } else if (action === 'switch-tab-json' || id === 'tab_btn_json') {
+        e.preventDefault();
+        window.switchAiTab('json');
+      } else if (action === 'copy-json' || id === 'copy_json_btn') {
+        e.preventDefault();
+        window.copyExtractedJson();
+      } else if (action === 'paste-clipboard' || id === 'paste_clipboard_btn') {
+        e.preventDefault();
+        window.pasteFromClipboard();
+      } else if (action === 'extract-ai' || id === 'ai_extract_btn') {
+        e.preventDefault();
+        window.startAiExtraction();
+      } else if (action === 'clear-files' || id === 'ai_clear_files_btn') {
+        e.preventDefault();
+        window.clearSelectedFiles();
+      } else if (action === 'remove-file') {
+        e.preventDefault();
+        const idx = parseInt(target.dataset.index, 10);
+        if (!isNaN(idx)) {
+          window.removeSelectedFile(idx);
+        }
+      } else if (action === 'copy-prompt' || id === 'copy_prompt_btn') {
+        e.preventDefault();
+        const promptPre = document.getElementById('system_prompt_pre');
+        const promptLabel = document.getElementById('copy_prompt_label');
+        if (promptPre) {
+          navigator.clipboard.writeText(promptPre.innerText).then(() => {
+            if (promptLabel) {
+              promptLabel.textContent = 'Copied!';
+              setTimeout(() => { promptLabel.textContent = 'Copy Prompt'; }, 2000);
+            }
+          });
+        }
+      }
+    });
   }
 
-  document.addEventListener('DOMContentLoaded', initAiSubmissionPage);
-  document.addEventListener('turbo:load', initAiSubmissionPage);
-  initAiSubmissionPage();
+  // Idempotent page-level initialization (Dropzone drag&drop, file rendering)
+  window.initAiSubmissionPage = function() {
+    window.renderSelectedFiles();
+
+    const dropzone = document.getElementById('ai_file_dropzone');
+    const wizardCard = document.getElementById('ai_setup_grid');
+
+    if (dropzone && !dropzone.dataset.dragBound) {
+      dropzone.dataset.dragBound = 'true';
+
+      [dropzone, wizardCard].filter(Boolean).forEach(el => {
+        ['dragenter', 'dragover'].forEach(eventName => {
+          el.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (dropzone) dropzone.classList.add('border-neutral-900', 'bg-base-200');
+          }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+          el.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (dropzone) dropzone.classList.remove('border-neutral-900', 'bg-base-200');
+          }, false);
+        });
+
+        el.addEventListener('drop', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const dt = e.dataTransfer;
+          const files = dt ? dt.files : null;
+          if (files && files.length > 0) {
+            window.handleFileSelect(files);
+          }
+        }, false);
+      });
+    }
+  };
+
+  // Run on initial load and turbo events
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', window.initAiSubmissionPage);
+  } else {
+    window.initAiSubmissionPage();
+  }
+  document.addEventListener('turbo:load', window.initAiSubmissionPage);
+  document.addEventListener('turbo:render', window.initAiSubmissionPage);
 </script>
 
 
