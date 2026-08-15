@@ -102,7 +102,12 @@ module AiSubmissionExtractor
          - Retail / Product Price ("Harga Produk", "Harga Pasaran", "Retail Price"): Extract pure numeric price (e.g. top price box "6500" or "Retail Price: RM 6500" -> "6500").
          - Deposit Amount ("Deposit Produk", "Deposit Amount", "Deposit"): Extract pure numeric deposit (e.g. "Deposit Amount" box "1950" -> "1950").
          - Monthly Rent ("Harga Sewa Sebulan", "Monthly Rent", "Rent"): Extract monthly rental amount from table "Rent" column / Period rows (e.g. "758.33").
-         - Note: DO NOT calculate or extract "Jumlah Sewa" (it is a system processed field computed by the system as Harga Produk - Deposit Produk).
+         - Selected Period ("period", "calculator_period", "tempoh"): Extract raw selected period from dropdown or header (e.g. "13Period" or "13").
+         - Note: DO NOT calculate or extract PROCESSED fields:
+           * "Jumlah Sewa" (system computed: Monthly Rent * Rental Duration)
+           * "Jumlah Tempoh Sewaan" (system computed: Period - 1, e.g. 13 - 1 = 12)
+           * "Tarikh mula sewaan" (system computed: today's date)
+           * "Tarikh akhir sewaan" (system computed: today's date + X months where X = Jumlah Tempoh Sewaan)
 
       4. Boolean / Checkbox Fields:
          - Set to true if agreed, accepted, or checked.
@@ -531,31 +536,66 @@ module AiSubmissionExtractor
     name = field_name.to_s.strip
     normalized = name.downcase.gsub(/["'()]/, '').gsub(/\s+/, ' ').strip
 
+    # Rental Start / End Dates
+    return true if normalized =~ /\b(tarikh\s+mula|tarikh\s+akhir|start\s+date|end\s+date)\b/i
+
+    # Jumlah Tempoh Sewaan = Period - 1 (PROCESSED DATA)
+    return true if normalized =~ /\b(jumlah\s+tempoh\s+sewaan|tempoh\s+sewaan|rental\s+duration|rental\s+period)\b/i
+
     # Nombor Pesanan / Order Number
     return true if normalized =~ /\b(pesanan|order)\b/i
 
-    # Jumlah Sewa (Total Rent) = Harga Produk - Deposit Produk
+    # Jumlah Sewa (Total Rent) = Harga Sewa Sebulan * Jumlah Tempoh Sewaan
     return true if normalized =~ /\b(jumlah\s+sewa|jumlah\s+sewaan|total\s+rent)\b/i
 
-    # Date-related: explicit date, tarikh, haribulan, or standalone day/month/year/hari/bulan/tahun
+    # Date-related: explicit agreement date, tarikh, haribulan, or standalone day/month/year/hari/bulan/tahun
     return true if normalized =~ /\b(date|tarikh|haribulan)\b/i
     return true if normalized =~ /\b(day|month|year|hari|bulan|tahun)\b/i
 
     false
   end
 
+  def calculate_jumlah_tempoh_sewaan(fields_hash = {})
+    return nil if fields_hash.blank?
+
+    raw_val = fields_hash['calculator_period'] || fields_hash['period'] || fields_hash['Period'] ||
+              fields_hash['tempoh'] || fields_hash['Tempoh'] || fields_hash['tempoh_sewaan'] ||
+              fields_hash['Jumlah Tempoh Sewaan'] || fields_hash['rental_period'] || fields_hash['rental_duration']
+
+    return nil if raw_val.blank?
+
+    match = raw_val.to_s.match(/(\d+)/)
+    return nil unless match
+
+    num = match[1].to_i
+    num > 1 ? (num - 1).to_s : num.to_s
+  end
+
+  def calculate_tarikh_akhir_sewaan(fields_hash = {}, now: Time.current)
+    duration_val = fields_hash['Jumlah Tempoh Sewaan'] || fields_hash['rental_duration'] || fields_hash['tempoh_sewaan'] ||
+                   calculate_jumlah_tempoh_sewaan(fields_hash)
+
+    months = duration_val.to_s.gsub(/[^0-9]/, '').to_i
+    months = 12 if months <= 0
+
+    (now + months.months).strftime('%d-%m-%Y')
+  end
+
   def calculate_jumlah_sewa(fields_hash = {})
     return nil if fields_hash.blank?
 
-    hp_raw = fields_hash['Harga Produk'] || fields_hash['Harga Pasaran/Harga Produk'] || fields_hash['Harga Pasaran'] || fields_hash['product_price'] || fields_hash['retail_price'] || fields_hash['market_price']
-    dp_raw = fields_hash['Deposit Produk'] || fields_hash['Deposit'] || fields_hash['product_deposit'] || fields_hash['deposit_amount']
+    hs_raw = fields_hash['Harga Sewa Sebulan'] || fields_hash['monthly_rent'] || fields_hash['monthly_rental_price'] ||
+             fields_hash['rent'] || fields_hash['sewa_sebulan'] || fields_hash['harga_sewa'] || fields_hash['harga_sewa_bulanan']
 
-    hp = hp_raw.to_s.gsub(/[^0-9.]/, '').to_f
-    dp = dp_raw.to_s.gsub(/[^0-9.]/, '').to_f
+    duration_val = fields_hash['Jumlah Tempoh Sewaan'] || fields_hash['rental_duration'] || fields_hash['tempoh_sewaan'] ||
+                   calculate_jumlah_tempoh_sewaan(fields_hash)
 
-    if hp > 0
-      diff = hp - dp
-      (diff % 1).zero? ? diff.to_i.to_s : sprintf('%.2f', diff)
+    hs = hs_raw.to_s.gsub(/[^0-9.]/, '').to_f
+    duration = duration_val.to_s.gsub(/[^0-9.]/, '').to_f
+
+    if hs > 0 && duration > 0
+      total = hs * duration
+      (total % 1).zero? ? total.to_i.to_s : sprintf('%.2f', total)
     else
       nil
     end
@@ -577,10 +617,19 @@ module AiSubmissionExtractor
     # 4. Order Number (e.g. 2026012200)
     elsif normalized =~ /\b(pesanan|order)\b/i
       order_number.presence || DailyOrderSequence.next_order_number(account, date: now)
-    # 5. Jumlah Sewa = Harga Produk - Deposit Produk
+    # 5. Jumlah Tempoh Sewaan = Period - 1 (e.g. 13Period -> 12)
+    elsif normalized =~ /\b(jumlah\s+tempoh\s+sewaan|tempoh\s+sewaan|rental\s+duration|rental\s+period)\b/i
+      calculate_jumlah_tempoh_sewaan(fields_hash || {})
+    # 6. Tarikh mula sewaan = Today's Date (e.g. 15-08-2026)
+    elsif normalized =~ /\b(tarikh\s+mula\s+sewaan|tarikh\s+mula|rental\s+start\s+date|start\s+date)\b/i
+      now.strftime('%d-%m-%Y')
+    # 7. Tarikh akhir sewaan = Today's Date + X months (e.g. 15-08-2027)
+    elsif normalized =~ /\b(tarikh\s+akhir\s+sewaan|tarikh\s+akhir|rental\s+end\s+date|end\s+date)\b/i
+      calculate_tarikh_akhir_sewaan(fields_hash || {}, now: now)
+    # 8. Jumlah Sewa = Harga Sewa Sebulan * Jumlah Tempoh Sewaan
     elsif normalized =~ /\b(jumlah\s+sewa|jumlah\s+sewaan|total\s+rent)\b/i
       calculate_jumlah_sewa(fields_hash || {})
-    # 6. Date (e.g. 22-01-2026)
+    # 9. Agreement Date (e.g. 15-08-2026)
     elsif normalized =~ /\b(date|tarikh)\b/i || field_type.to_s == 'date'
       now.strftime('%d-%m-%Y')
     else
@@ -665,6 +714,12 @@ module AiSubmissionExtractor
         case f_name
         when 'Harga Sewa Sebulan'
           val = raw_fields['monthly_rent'] || raw_fields['monthly_rental_price'] || raw_fields['monthly_rental'] || raw_fields['rent'] || raw_fields['sewa_sebulan'] || raw_fields['harga_sewa'] || raw_fields['harga_sewa_bulanan']
+        when 'Jumlah Tempoh Sewaan', 'Tempoh Sewaan'
+          val = raw_fields['rental_duration'] || raw_fields['rental_period'] || raw_fields['tempoh_sewaan'] || raw_fields['jumlah_tempoh_sewaan'] || raw_fields['duration'] || raw_fields['period']
+        when 'Tarikh mula sewaan', 'Tarikh Mula Sewaan'
+          val = raw_fields['rental_start_date'] || raw_fields['start_date'] || raw_fields['tarikh_mula_sewaan'] || raw_fields['tarikh_mula']
+        when 'Tarikh akhir sewaan', 'Tarikh Akhir Sewaan'
+          val = raw_fields['rental_end_date'] || raw_fields['end_date'] || raw_fields['tarikh_akhir_sewaan'] || raw_fields['tarikh_akhir']
         when 'Deposit Produk'
           val = raw_fields['product_deposit'] || raw_fields['deposit'] || raw_fields['deposit_amount'] || raw_fields['deposit_produk'] || raw_fields['deposit_sewa']
         when 'Harga Produk'
