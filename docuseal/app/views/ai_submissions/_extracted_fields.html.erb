@@ -4,20 +4,6 @@
 
 
 <div class="space-y-6">
-  <!-- AI Extraction Overview Banner -->
-  <div class="alert bg-base-100 border border-base-300 rounded-2xl p-4 shadow-sm flex items-start justify-between">
-    <div class="flex items-start space-x-3">
-      <div class="p-2 bg-neutral-900 text-yellow-400 rounded-xl shadow-xs flex-shrink-0">
-        <%= svg_icon('sparkles', class: 'w-5 h-5 stroke-2') %>
-      </div>
-      <div>
-        <div class="text-sm font-bold text-base-content">Data Extracted Successfully by Gemini 3.6 Flash</div>
-        <p class="text-xs text-base-content/70 mt-0.5"><%= summary.presence || 'All fields and recipient details have been automatically populated from your documents and text notes.' %></p>
-      </div>
-    </div>
-    <span class="badge badge-neutral font-mono text-xs py-2.5 px-3 flex-shrink-0">AI Verified</span>
-  </div>
-
   <!-- Tab selector: Form View vs JSON Output View -->
   <div class="flex border-b border-base-300">
     <button type="button" id="tab_btn_form" data-action="switch-tab-form" class="py-2.5 px-4 text-xs font-bold border-b-2 border-neutral-900 text-neutral-900 transition-colors cursor-pointer">
@@ -59,7 +45,7 @@
             <div class="md:col-span-1">
               <div class="flex items-center justify-between mb-1">
                 <label class="block text-xs font-bold text-base-content/90">
-                  Recipient Email (Auto-extracted)
+                  Recipient Email (Auto-extracted) <span class="text-error font-bold">*</span>
                 </label>
                 <span class="badge badge-xs badge-neutral font-mono text-[9px]">Destination</span>
               </div>
@@ -132,7 +118,7 @@
                           <% if en_trans.present? %>
                             <span class="text-[11px] text-neutral-700 font-medium italic">(<%= en_trans %>)</span>
                           <% end %>
-                          <% if tf['required'] %><span class="text-error font-bold">*</span><% end %>
+                          <% if [true, 'true', 1, '1'].include?(tf['required']) %><span class="text-error font-bold">*</span><% end %>
                         </label>
                         <span class="badge badge-xs text-[10px] uppercase font-mono" style="background-color: #f4f4f5 !important; color: #18181b !important; border: 1px solid #e4e4e7 !important;"><%= tf['type'] %></span>
                       </div>
@@ -184,7 +170,7 @@
                           <% elsif tf['name'].to_s.include?('Jumlah Sewa') %>
                             <span class="badge badge-xs font-mono text-[9px] bg-neutral-200 text-neutral-800 border-neutral-300">Rent × Duration</span>
                           <% end %>
-                          <% if tf['required'] %><span class="text-error font-bold">*</span><% end %>
+                          <% if [true, 'true', 1, '1'].include?(tf['required']) %><span class="text-error font-bold">*</span><% end %>
                         </label>
                         <span class="badge badge-xs text-[10px] uppercase font-mono" style="background-color: #f4f4f5 !important; color: #18181b !important; border: 1px solid #e4e4e7 !important;"><%= tf['type'] %></span>
                       </div>
@@ -222,7 +208,7 @@
                           <% if en_trans.present? %>
                             <span class="text-[11px] text-neutral-700 font-medium italic">(<%= en_trans %>)</span>
                           <% end %>
-                          <% if tf['required'] %><span class="text-error font-bold">*</span><% end %>
+                          <% if [true, 'true', 1, '1'].include?(tf['required']) %><span class="text-error font-bold">*</span><% end %>
                         </label>
                         <span class="badge badge-xs text-[10px] uppercase font-mono" style="background-color: #18181b !important; color: #ffffff !important;">SIGNATURE</span>
                       </div>

@@ -19,14 +19,16 @@
           <%= svg_icon('sparkles', class: 'w-6 h-6 stroke-2') %>
         </div>
         <div>
-          <h1 class="text-2xl font-bold text-base-content">Create Submission with AI</h1>
+          <div class="flex items-center space-x-2">
+            <h1 class="text-2xl font-bold text-base-content">Create Submission with AI</h1>
+            <button type="button" id="toggle_prompt_fields_btn" onclick="togglePromptAndFields()" class="p-1.5 rounded-lg border border-base-300 bg-base-100 hover:bg-base-200 text-base-content/70 hover:text-base-content transition-all inline-flex items-center justify-center cursor-pointer shadow-2xs" title="Show Template Fields & AI System Prompt">
+              <span id="icon_hidden_state" class="flex items-center"><%= svg_icon('eye_off', class: 'w-4 h-4') %></span>
+              <span id="icon_shown_state" class="hidden flex items-center"><%= svg_icon('eye', class: 'w-4 h-4') %></span>
+            </button>
+          </div>
           <p class="text-xs text-base-content/60 mt-0.5">Extract customer details, MyKad IC, calculator terms & box IMEI with Gemini 3.6 Flash</p>
         </div>
       </div>
-    </div>
-    <div class="flex items-center space-x-2">
-      <span class="badge text-xs font-mono py-3 px-3 shadow-2xs" style="background-color: #18181b !important; color: #ffffff !important; border: 1px solid #18181b !important;">Gemini 3.6 Flash</span>
-      <span class="badge text-xs py-3 px-3 shadow-2xs" style="background-color: #ffffff !important; color: #18181b !important; border: 1px solid #71717a !important;">Multimodal OCR & Vision</span>
     </div>
   </div>
 
@@ -47,58 +49,88 @@
                 <span>No active templates found. Please create a template first.</span>
               </div>
             <% else %>
-              <select id="ai_template_select" name="template_id" class="select select-bordered select-sm w-full text-xs font-medium rounded-xl focus:border-primary" onchange="onTemplateChange(this.value)">
+              <input type="hidden" id="ai_template_select" name="template_id" value="<%= @template&.id || @templates.first&.id %>">
+              <div class="grid grid-cols-1 gap-2.5" id="template_buttons_group">
                 <% @templates.each do |tmpl| %>
                   <% tmpl_fields = tmpl.fields.to_a %>
                   <% sig_count = tmpl_fields.count { |f| f['type'] == 'signature' } %>
                   <% data_count = tmpl_fields.size - sig_count %>
                   <% desc_parts = ["#{data_count} #{'field'.pluralize(data_count)}"] %>
                   <% desc_parts << "#{sig_count} #{'signature'.pluralize(sig_count)}" if sig_count.positive? %>
-                  <option value="<%= tmpl.id %>" <%= 'selected' if tmpl.id == @template&.id %>>
-                    <%= tmpl.name %> (<%= desc_parts.join(', ') %>)
-                  </option>
-                <% end %>
-              </select>
-
-            <% end %>
-          </div>
-
-          <!-- Template Fields Container -->
-          <div id="template_fields_container">
-            <% if @template %>
-              <%= render 'template_fields', template: @template %>
-            <% end %>
-          </div>
-
-          <!-- AI System Prompt Accordion (Collapsed by Default) -->
-          <div class="mt-4 bg-base-200/80 rounded-2xl border border-base-300 overflow-hidden shadow-2xs">
-            <details class="group">
-              <summary class="flex items-center justify-between p-3.5 cursor-pointer select-none bg-base-200 hover:bg-base-300/60 transition-colors list-none">
-                <div class="flex items-center space-x-2">
-                  <div class="p-1 bg-neutral-900 text-yellow-400 rounded-lg">
-                    <%= svg_icon('sparkles', class: 'w-3.5 h-3.5 stroke-2') %>
-                  </div>
-                  <span class="font-bold text-xs uppercase tracking-wider text-base-content/80">AI System Prompt & Rules</span>
-                  <span class="badge badge-xs font-mono text-[9px]" style="background-color: #18181b !important; color: #ffffff !important;">Gemini 3.6 Flash</span>
-                </div>
-                <div class="flex items-center space-x-2">
-                  <span class="text-[11px] text-base-content/50 group-open:hidden">View Prompt</span>
-                  <span class="text-[11px] text-base-content/50 hidden group-open:inline">Hide Prompt</span>
-                  <div class="p-1 rounded-md bg-base-100/80 text-base-content/70 group-open:rotate-180 transition-transform duration-200">
-                    <%= svg_icon('chevron_down', class: 'w-4 h-4 stroke-2') %>
-                  </div>
-                </div>
-              </summary>
-
-              <div class="p-3.5 pt-2 border-t border-base-300 space-y-2.5">
-                <div class="flex items-center justify-between">
-                  <span class="text-[11px] text-base-content/80 font-medium">Instructions & extraction rules sent with every request:</span>
-                  <button type="button" data-action="copy-prompt" id="copy_prompt_btn" class="btn btn-xs text-[10px] !rounded-lg gap-1 font-bold cursor-pointer shadow-xs" style="background-color: #18181b !important; color: #ffffff !important; border: 1px solid #18181b !important;">
-                    <%= svg_icon('clipboard_copy', class: 'w-3 h-3 text-white') %>
-                    <span id="copy_prompt_label" class="font-bold text-white" style="color: #ffffff !important;">Copy Prompt</span>
+                  <% is_selected = (tmpl.id == (@template&.id || @templates.first&.id)) %>
+                  
+                  <button type="button" 
+                          data-action="select-template" 
+                          data-template-id="<%= tmpl.id %>"
+                          style="<%= is_selected ? 'background-color: #18181b !important; color: #ffffff !important; border: 2px solid #2563eb !important; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15) !important;' : 'background-color: #ffffff !important; color: #18181b !important; border: 1.5px solid #e4e4e7 !important; box-shadow: none !important;' %>"
+                          class="template-option-btn text-left p-3.5 rounded-xl transition-all flex items-center justify-between cursor-pointer w-full">
+                    <div class="flex items-center space-x-3 truncate pointer-events-none">
+                      <div class="p-2 rounded-lg transition-colors icon-box flex items-center justify-center"
+                           style="<%= is_selected ? 'background-color: #27272a !important; color: #facc15 !important;' : 'background-color: #f4f4f5 !important; color: #52525b !important;' %>">
+                        <%= svg_icon('file_text', class: 'w-4 h-4 stroke-2') %>
+                      </div>
+                      <div class="truncate">
+                        <div class="font-bold text-xs tmpl-name"
+                             style="<%= is_selected ? 'color: #ffffff !important; font-weight: 700 !important;' : 'color: #18181b !important; font-weight: 700 !important;' %>">
+                          <%= tmpl.name %>
+                        </div>
+                        <div class="text-[11px] tmpl-desc"
+                             style="<%= is_selected ? 'color: #d4d4d8 !important; font-weight: 500 !important;' : 'color: #71717a !important; font-weight: 500 !important;' %>">
+                          <%= desc_parts.join(', ') %>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="flex items-center space-x-2 flex-shrink-0 pointer-events-none">
+                      <span class="check-badge"
+                            style="<%= is_selected ? 'display: inline-flex !important; align-items: center !important; gap: 4px !important; background-color: #2563eb !important; color: #ffffff !important; font-weight: 700 !important; font-size: 11px !important; padding: 4px 10px !important; border-radius: 8px !important;' : 'display: none !important;' %>">
+                        <%= svg_icon('check', class: 'w-3.5 h-3.5 stroke-2 text-white') %>
+                        Selected
+                      </span>
+                    </div>
                   </button>
-                </div>
-                <pre id="system_prompt_pre" class="p-3 bg-neutral text-neutral-content text-[11px] font-mono rounded-xl overflow-x-auto max-h-72 leading-relaxed select-all whitespace-pre-wrap shadow-inner">You are an expert AI document processing assistant specializing in extracting structured RAW DATA from customer identity documents (e.g. Malaysian MyKad / Kad Pengenalan), calculator screenshots, device box labels (IMEI, Serial Number), and customer WhatsApp/order notes for equipment/phone rental agreements.
+                <% end %>
+              </div>
+            <% end %>
+          </div>
+
+          <!-- Hidden section for Template Fields & AI System Prompt (toggled via Eye icon beside title) -->
+          <div id="ai_template_prompt_details" class="hidden space-y-4 pt-2 border-t border-base-200">
+            <!-- Template Fields Container -->
+            <div id="template_fields_container">
+              <% if @template %>
+                <%= render 'template_fields', template: @template %>
+              <% end %>
+            </div>
+
+            <!-- AI System Prompt Accordion (Collapsed by Default) -->
+            <div class="bg-base-200/80 rounded-2xl border border-base-300 overflow-hidden shadow-2xs">
+              <details class="group">
+                <summary class="flex items-center justify-between p-3.5 cursor-pointer select-none bg-base-200 hover:bg-base-300/60 transition-colors list-none">
+                  <div class="flex items-center space-x-2">
+                    <div class="p-1 bg-neutral-900 text-yellow-400 rounded-lg">
+                      <%= svg_icon('sparkles', class: 'w-3.5 h-3.5 stroke-2') %>
+                    </div>
+                    <span class="font-bold text-xs uppercase tracking-wider text-base-content/80">AI System Prompt & Rules</span>
+                    <span class="badge badge-xs font-mono text-[9px]" style="background-color: #18181b !important; color: #ffffff !important;">Gemini 3.6 Flash</span>
+                  </div>
+                  <div class="flex items-center space-x-2">
+                    <span class="text-[11px] text-base-content/50 group-open:hidden">View Prompt</span>
+                    <span class="text-[11px] text-base-content/50 hidden group-open:inline">Hide Prompt</span>
+                    <div class="p-1 rounded-md bg-base-100/80 text-base-content/70 group-open:rotate-180 transition-transform duration-200">
+                      <%= svg_icon('chevron_down', class: 'w-4 h-4 stroke-2') %>
+                    </div>
+                  </div>
+                </summary>
+
+                <div class="p-3.5 pt-2 border-t border-base-300 space-y-2.5">
+                  <div class="flex items-center justify-between">
+                    <span class="text-[11px] text-base-content/80 font-medium">Instructions & extraction rules sent with every request:</span>
+                    <button type="button" data-action="copy-prompt" id="copy_prompt_btn" class="btn btn-xs text-[10px] !rounded-lg gap-1 font-bold cursor-pointer shadow-xs" style="background-color: #18181b !important; color: #ffffff !important; border: 1px solid #18181b !important;">
+                      <%= svg_icon('clipboard_copy', class: 'w-3 h-3 text-white') %>
+                      <span id="copy_prompt_label" class="font-bold text-white" style="color: #ffffff !important;">Copy Prompt</span>
+                    </button>
+                  </div>
+                  <pre id="system_prompt_pre" class="p-3 bg-neutral text-neutral-content text-[11px] font-mono rounded-xl overflow-x-auto max-h-72 leading-relaxed select-all whitespace-pre-wrap shadow-inner">You are an expert AI document processing assistant specializing in extracting structured RAW DATA from customer identity documents (e.g. Malaysian MyKad / Kad Pengenalan), calculator screenshots, device box labels (IMEI, Serial Number), and customer WhatsApp/order notes for equipment/phone rental agreements.
 
 CRITICAL INSTRUCTION:
 Extract ONLY RAW DATA fields (Customer Identity, Device Model, IMEI/Serial Number, Deposit Amount, Monthly Rent, Product Price, Duration). DO NOT extract, calculate, or include PROCESSED fields (such as Order Number, Date fields, or Jumlah Sewa) or Signatures.
@@ -124,8 +156,9 @@ RAW DATA EXTRACTION RULES:
 
 4. Response Format:
    - Valid JSON object containing "summary", "submitters", and "fields" (RAW data fields only).</pre>
-              </div>
-            </details>
+                </div>
+              </details>
+            </div>
           </div>
         </div>
       </div>
@@ -213,9 +246,6 @@ RAW DATA EXTRACTION RULES:
         </div>
       </div>
       <div class="text-lg font-bold text-base-content">Analyzing Documents & Extracting Fields...</div>
-      <p class="text-xs text-base-content/60 max-w-md mx-auto leading-relaxed">
-        Gemini 3.6 Flash is extracting MyKad IC details, device IMEI/Serial numbers, calculator rental terms, and populating all required agreement fields.
-      </p>
     </div>
 
     <!-- Step 3: Extracted Results Container -->
@@ -224,6 +254,28 @@ RAW DATA EXTRACTION RULES:
 </div>
 
 <script nonce="<%= content_security_policy_nonce %>">
+  window.togglePromptAndFields = function() {
+    const detailsSection = document.getElementById('ai_template_prompt_details');
+    const iconHidden = document.getElementById('icon_hidden_state');
+    const iconShown = document.getElementById('icon_shown_state');
+    const btn = document.getElementById('toggle_prompt_fields_btn');
+
+    if (!detailsSection) return;
+
+    const isHidden = detailsSection.classList.contains('hidden');
+    if (isHidden) {
+      detailsSection.classList.remove('hidden');
+      if (iconHidden) iconHidden.classList.add('hidden');
+      if (iconShown) iconShown.classList.remove('hidden');
+      if (btn) btn.setAttribute('title', 'Hide Template Fields & AI System Prompt');
+    } else {
+      detailsSection.classList.add('hidden');
+      if (iconHidden) iconHidden.classList.remove('hidden');
+      if (iconShown) iconShown.classList.add('hidden');
+      if (btn) btn.setAttribute('title', 'Show Template Fields & AI System Prompt');
+    }
+  };
+
   window.aiSelectedFiles = window.aiSelectedFiles || [];
 
   window.recalculateJumlahSewa = function() {
@@ -263,6 +315,38 @@ RAW DATA EXTRACTION RULES:
         taInput.value = `${d}-${m}-${y}`;
       }
     }
+  };
+
+  window.selectTemplateBtn = function(templateId) {
+    const hiddenInput = document.getElementById('ai_template_select');
+    if (hiddenInput) {
+      hiddenInput.value = templateId;
+    }
+
+    const buttons = document.querySelectorAll('.template-option-btn');
+    buttons.forEach(btn => {
+      const isThis = (btn.dataset.templateId == templateId);
+      const iconBox = btn.querySelector('.icon-box');
+      const nameEl = btn.querySelector('.tmpl-name');
+      const descEl = btn.querySelector('.tmpl-desc');
+      const checkBadge = btn.querySelector('.check-badge');
+
+      if (isThis) {
+        btn.setAttribute('style', 'background-color: #18181b !important; color: #ffffff !important; border: 2px solid #2563eb !important; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15) !important;');
+        if (iconBox) iconBox.setAttribute('style', 'background-color: #27272a !important; color: #facc15 !important;');
+        if (nameEl) nameEl.setAttribute('style', 'color: #ffffff !important; font-weight: 700 !important;');
+        if (descEl) descEl.setAttribute('style', 'color: #d4d4d8 !important; font-weight: 500 !important;');
+        if (checkBadge) checkBadge.setAttribute('style', 'display: inline-flex !important; align-items: center !important; gap: 4px !important; background-color: #2563eb !important; color: #ffffff !important; font-weight: 700 !important; font-size: 11px !important; padding: 4px 10px !important; border-radius: 8px !important;');
+      } else {
+        btn.setAttribute('style', 'background-color: #ffffff !important; color: #18181b !important; border: 1.5px solid #e4e4e7 !important; box-shadow: none !important;');
+        if (iconBox) iconBox.setAttribute('style', 'background-color: #f4f4f5 !important; color: #52525b !important;');
+        if (nameEl) nameEl.setAttribute('style', 'color: #18181b !important; font-weight: 700 !important;');
+        if (descEl) descEl.setAttribute('style', 'color: #71717a !important; font-weight: 500 !important;');
+        if (checkBadge) checkBadge.setAttribute('style', 'display: none !important;');
+      }
+    });
+
+    window.onTemplateChange(templateId);
   };
 
   window.onTemplateChange = function(templateId) {
@@ -628,6 +712,12 @@ RAW DATA EXTRACTION RULES:
         const idx = parseInt(target.dataset.index, 10);
         if (!isNaN(idx)) {
           window.removeSelectedFile(idx);
+        }
+      } else if (action === 'select-template') {
+        e.preventDefault();
+        const templateId = target.dataset.templateId;
+        if (templateId) {
+          window.selectTemplateBtn(templateId);
         }
       } else if (action === 'copy-prompt' || id === 'copy_prompt_btn') {
         e.preventDefault();
