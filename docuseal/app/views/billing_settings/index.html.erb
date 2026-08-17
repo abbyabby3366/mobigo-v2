@@ -122,7 +122,15 @@
     <!-- Recent Signature Charges -->
     <div class="card bg-base-200 border border-base-300 shadow-sm mb-6">
       <div class="card-body p-6">
-        <h2 class="text-xl font-bold mb-4">Recent API Usage & Billing Activity</h2>
+        <div class="flex items-center justify-between gap-2 mb-4">
+          <h2 class="text-xl font-bold">Recent API Usage & Billing Activity</h2>
+          <% if @recent_transactions.present? %>
+            <%= link_to history_settings_billing_index_path, class: 'btn btn-outline btn-sm gap-1' do %>
+              <span>View All</span>
+              <%= svg_icon('arrow_right', class: 'w-4 h-4') rescue '' %>
+            <% end %>
+          <% end %>
+        </div>
 
         <% if @recent_transactions.present? %>
           <div class="overflow-x-auto">
@@ -165,6 +173,12 @@
                 <% end %>
               </tbody>
             </table>
+          </div>
+          <div class="mt-4 pt-3 border-t border-base-300 text-center">
+            <%= link_to history_settings_billing_index_path, class: 'btn btn-ghost btn-sm text-primary font-medium gap-1' do %>
+              <span>View All Activity</span>
+              <%= svg_icon('arrow_right', class: 'w-4 h-4') rescue '' %>
+            <% end %>
           </div>
         <% else %>
           <div class="text-center py-8 bg-base-100 rounded-lg border border-dashed border-base-300">

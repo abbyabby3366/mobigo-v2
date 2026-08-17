@@ -64,6 +64,10 @@ class AccountConfig < ApplicationRecord
   POLICY_LINKS_KEY = 'policy_links'
   ENABLE_MCP_KEY = 'enable_mcp'
   BILLING_CREDIT_BALANCE = 'billing_credit_balance'
+  AI_ROUTER_KEY = 'ai_router_key'
+  AI_ROUTER_URL = 'ai_router_url'
+  AI_ROUTER_MODEL = 'ai_router_model'
+  AI_CREDIT_BALANCE = 'ai_credit_balance'
 
   EMAIL_VARIABLES = {
     SUBMITTER_INVITATION_EMAIL_KEY => %w[template.name submitter.link account.name].freeze,

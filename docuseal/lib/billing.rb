@@ -69,7 +69,45 @@ module Billing
   def recent_transactions(account, limit = 10)
     CompletedSubmitter.where(account_id: account.id)
                       .preload(:submitter, :submission)
-                      .order(completed_at: :desc)
+                      .order(completed_at: :desc, id: :desc)
                       .limit(limit)
+  end
+
+  def all_transactions(account, start_date: nil, end_date: nil)
+    scope = CompletedSubmitter.where(account_id: account.id)
+                              .preload(:submitter, :submission)
+
+    if start_date.present?
+      parsed_start = Time.zone.parse(start_date.to_s)&.beginning_of_day rescue nil
+      if parsed_start
+        scope = scope.where('completed_at >= ? OR (completed_at IS NULL AND created_at >= ?)', parsed_start, parsed_start)
+      end
+    end
+
+    if end_date.present?
+      parsed_end = Time.zone.parse(end_date.to_s)&.end_of_day rescue nil
+      if parsed_end
+        scope = scope.where('completed_at <= ? OR (completed_at IS NULL AND created_at <= ?)', parsed_end, parsed_end)
+      end
+    end
+
+    scope.order(completed_at: :desc, id: :desc)
+  end
+
+  def generate_csv(transactions)
+    require 'csv'
+
+    CSV.generate(headers: true) do |csv|
+      csv << ['Date', 'Submission ID', 'Document / Submission', 'Submitter Email', 'Type', 'Amount (USD)', 'Status']
+
+      transactions.find_each do |tx|
+        date = (tx.completed_at || tx.created_at)&.strftime('%b %d, %Y %H:%M')
+        submission_name = tx.submission&.name.presence || "Submission ##{tx.submission_id}"
+        submitter_email = tx.submitter&.email || tx.submitter&.name || "Submitter ##{tx.submitter_id}"
+        amount = "-$#{sprintf('%.2f', PRICE_PER_SIGNATURE)} USD"
+
+        csv << [date, tx.submission_id, submission_name, submitter_email, 'API Signature', amount, 'Paid']
+      end
+    end
   end
 end

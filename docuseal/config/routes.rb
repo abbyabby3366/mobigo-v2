@@ -218,7 +218,14 @@ Rails.application.routes.draw do
       end
     end
     resource :account, only: %i[show update destroy]
-    resources :billing, only: %i[index], controller: 'billing_settings'
+    resources :billing, only: %i[index], controller: 'billing_settings' do
+      collection do
+        get :history
+      end
+    end
+    resources :ai_credits, only: %i[index create], controller: 'ai_credits_settings' do
+      post :check_balance, on: :collection
+    end
     resources :profile, only: %i[index] do
       collection do
         patch :update_contact

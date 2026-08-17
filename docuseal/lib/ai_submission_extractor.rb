@@ -18,9 +18,10 @@ module AiSubmissionExtractor
   module_function
 
   def call(template:, text: nil, files: [], account: nil)
-    api_url = ENV.fetch('AI_ROUTER_URL', DEFAULT_ROUTER_URL)
-    api_key = ENV.fetch('AI_ROUTER_KEY', DEFAULT_API_KEY)
-    primary_model = ENV.fetch('AI_ROUTER_MODEL', DEFAULT_MODEL)
+    acc = account || template&.account
+    api_url = AiCredit.api_url(acc)
+    api_key = AiCredit.api_key(acc)
+    primary_model = AiCredit.model(acc)
 
     prompt_parts = build_prompt_parts(template, text, files)
 
@@ -41,7 +42,7 @@ module AiSubmissionExtractor
 
     raise "AI Extraction failed: #{errors.join('; ')}" if response_json.blank?
 
-    parse_ai_response(response_json, template, account || template.account)
+    parse_ai_response(response_json, template, acc || template.account)
   end
 
   def build_prompt_parts(template, text, files)

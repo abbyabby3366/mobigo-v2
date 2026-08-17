@@ -1,0 +1,127 @@
+<div class="flex flex-wrap space-y-4 md:flex-nowrap md:space-y-0 md:space-x-8 px-3 sm:px-6">
+  <%= render 'shared/settings_nav' %>
+  <div class="flex-grow max-w-3xl">
+    <div class="flex flex-col gap-2 md:flex-row md:justify-between md:items-center mb-6">
+      <div>
+        <h1 class="text-3xl md:text-4xl font-bold">
+          AI Credits
+        </h1>
+        <p class="text-sm opacity-70 mt-1">
+          Manage your AI provider credentials and view your available AI credit balance.
+        </p>
+      </div>
+      <div class="badge badge-success badge-lg gap-2 whitespace-nowrap font-medium text-xs sm:text-sm shrink-0 self-start md:self-auto h-auto py-1.5 px-3">
+        <%= svg_icon('circle_check_filled', class: 'w-4 h-4 shrink-0') rescue '' %>
+        <span>AI Provider Active</span>
+      </div>
+    </div>
+
+    <!-- AI Credit Balance Card (Simple Provider Balance Display) -->
+    <div class="card bg-base-200 border border-base-300 shadow-sm mb-6">
+      <div class="card-body p-6">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <div class="text-xs uppercase tracking-wider font-semibold opacity-60">
+              Current Available AI Credit Balance
+            </div>
+            <div class="text-4xl font-extrabold text-primary mt-1">
+              <% if @balance.present? %>
+                <%= number_to_currency(@balance, unit: '$') %>
+                <span class="text-sm font-normal text-base-content opacity-60">USD</span>
+              <% else %>
+                -
+              <% end %>
+            </div>
+            <div class="text-xs opacity-70 mt-1">
+              Credit balance and token usage managed directly by your AI provider.
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <%= form_with url: check_balance_settings_ai_credits_path, method: :post, local: true do %>
+              <button type="submit" class="base-button !flex-nowrap flex-row items-center justify-center space-x-2 whitespace-nowrap !px-5">
+                <%= svg_icon('refresh', class: 'w-4 h-4 flex-shrink-0 inline-block') rescue '' %>
+                <span class="whitespace-nowrap">Check / Sync Balance</span>
+              </button>
+            <% end %>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI API Credentials & Configuration Card -->
+    <div class="card bg-base-200 border border-base-300 shadow-sm mb-6">
+      <div class="card-body p-6">
+        <div class="flex items-center justify-between gap-2 mb-2">
+          <h2 class="text-lg md:text-xl font-bold flex items-center gap-2">
+            <%= svg_icon('key', class: 'w-5 h-5 text-primary') rescue '' %>
+            <span>AI Provider API Credentials</span>
+          </h2>
+          <span class="badge badge-outline text-xs">Provider Settings</span>
+        </div>
+        <p class="text-xs opacity-70 mb-4">
+          Paste your AI Provider API Key below to request available balance and power AI document extractions.
+        </p>
+
+        <%= form_with url: settings_ai_credits_path, method: :post, local: true, class: 'space-y-4' do |f| %>
+          <div>
+            <label class="label text-xs font-semibold uppercase opacity-70 pb-1" for="ai_router_key">
+              AI API Key
+            </label>
+            <div class="relative flex items-center">
+              <input type="password"
+                     id="ai_router_key"
+                     name="ai_router_key"
+                     value="<%= @api_key %>"
+                     placeholder="sk-..."
+                     class="input input-bordered w-full font-mono text-sm pr-12 focus:input-primary"
+                     required />
+              <button type="button"
+                      onclick="const el = document.getElementById('ai_router_key'); el.type = el.type === 'password' ? 'text' : 'password';"
+                      class="btn btn-ghost btn-xs absolute right-2 text-xs opacity-70 hover:opacity-100">
+                Show/Hide
+              </button>
+            </div>
+            <p class="text-[11px] opacity-60 mt-1">
+              Your API key is used directly to authenticate with your AI provider endpoint.
+            </p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="label text-xs font-semibold uppercase opacity-70 pb-1" for="ai_router_url">
+                AI Router Endpoint URL
+              </label>
+              <input type="text"
+                     id="ai_router_url"
+                     name="ai_router_url"
+                     value="<%= @api_url %>"
+                     placeholder="https://router.oino.dev/v1/chat/completions"
+                     class="input input-bordered w-full font-mono text-xs focus:input-primary" />
+            </div>
+
+            <div>
+              <label class="label text-xs font-semibold uppercase opacity-70 pb-1" for="ai_router_model">
+                Primary AI Model
+              </label>
+              <input type="text"
+                     id="ai_router_model"
+                     name="ai_router_model"
+                     value="<%= @model %>"
+                     placeholder="antigravity/gemini-3.6-flash-medium"
+                     class="input input-bordered w-full font-mono text-xs focus:input-primary" />
+            </div>
+          </div>
+
+          <div class="flex justify-end pt-2">
+            <button type="submit" class="base-button !flex-nowrap flex-row items-center justify-center space-x-2 whitespace-nowrap !px-5">
+              <%= svg_icon('check', class: 'w-4 h-4 flex-shrink-0 inline-block') rescue '' %>
+              <span>Save API Credentials</span>
+            </button>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  </div>
+  <div class="w-0 md:w-52"></div>
+</div>
