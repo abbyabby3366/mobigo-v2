@@ -226,7 +226,7 @@ RAW DATA EXTRACTION RULES:
           </div>
 
           <!-- Extract Button & Error Alert -->
-          <div id="ai_extract_error" class="hidden alert alert-error text-xs p-3 rounded-xl"></div>
+          <div id="ai_extract_error" class="hidden text-xs p-3.5 rounded-xl font-bold shadow-md flex items-center space-x-2.5" style="background-color: #dc2626 !important; color: #ffffff !important; border: 1px solid #b91c1c !important;"></div>
 
           <div class="pt-3 flex justify-end">
             <button type="button" id="ai_extract_btn" data-action="extract-ai" class="btn btn-neutral !bg-neutral-900 hover:!bg-black !text-white text-xs px-8 shadow-sm hover:shadow-md transition-all gap-2 !rounded-xl !h-11 cursor-pointer">
@@ -600,11 +600,205 @@ RAW DATA EXTRACTION RULES:
     }
   };
 
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  window.showAiFormValidationError = function(msg) {
+    const alertEl = document.getElementById('ai_form_validation_alert');
+    const alertText = document.getElementById('ai_form_validation_alert_text');
+    if (alertEl && alertText) {
+      alertText.textContent = msg;
+      alertEl.classList.remove('hidden');
+      alertEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
+  window.showMissingFieldsConfirmationModal = function(form, missingList, firstInput) {
+    const modal = document.getElementById('ai_missing_fields_modal');
+    const msgEl = document.getElementById('ai_missing_fields_message');
+    const backBtn = document.getElementById('ai_missing_fields_back_btn');
+    const continueBtn = document.getElementById('ai_missing_fields_continue_btn');
+
+    if (!modal || !msgEl) {
+      if (confirm(`${missingList.join(', ')} fields are missing. Do you wish to continue?`)) {
+        form.dataset.confirmedSubmit = 'true';
+        form.submit();
+      }
+      return;
+    }
+
+    let promptMsg = '';
+    if (missingList.length === 1) {
+      promptMsg = `<span class="font-bold text-neutral-900">"${escapeHtml(missingList[0])}"</span> is not populated. Do you wish to continue?`;
+    } else if (missingList.length === 2) {
+      promptMsg = `<span class="font-bold text-neutral-900">"${escapeHtml(missingList[0])}"</span> and <span class="font-bold text-neutral-900">"${escapeHtml(missingList[1])}"</span> are not populated. Do you wish to continue?`;
+    } else {
+      const copy = [...missingList];
+      const last = copy.pop();
+      const boldList = copy.map(item => `<span class="font-bold text-neutral-900">"${escapeHtml(item)}"</span>`).join(', ');
+      promptMsg = `${boldList}, and <span class="font-bold text-neutral-900">"${escapeHtml(last)}"</span> are not populated. Do you wish to continue?`;
+    }
+
+    msgEl.innerHTML = promptMsg;
+
+    const handleBack = function(ev) {
+      if (ev) ev.preventDefault();
+      cleanup();
+      if (typeof modal.close === 'function') {
+        modal.close();
+      } else {
+        modal.classList.remove('modal-open');
+      }
+      if (firstInput) {
+        setTimeout(() => {
+          firstInput.focus();
+          firstInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+      }
+    };
+
+    const handleContinue = function(ev) {
+      if (ev) ev.preventDefault();
+      cleanup();
+      if (typeof modal.close === 'function') {
+        modal.close();
+      } else {
+        modal.classList.remove('modal-open');
+      }
+      form.dataset.confirmedSubmit = 'true';
+      form.submit();
+    };
+
+    const cleanup = function() {
+      if (backBtn) backBtn.removeEventListener('click', handleBack);
+      if (continueBtn) continueBtn.removeEventListener('click', handleContinue);
+    };
+
+    if (backBtn) backBtn.addEventListener('click', handleBack);
+    if (continueBtn) continueBtn.addEventListener('click', handleContinue);
+
+    if (typeof modal.showModal === 'function') {
+      modal.showModal();
+    } else {
+      modal.classList.add('modal-open');
+    }
+  };
+
   // Attach global document listeners once across Turbo lifecycle
   if (!window.__aiWizardListenersAttached) {
     window.__aiWizardListenersAttached = true;
 
-    // 1. Global Paste (Ctrl+V / Cmd+V) for images, PDFs, and text
+    // 1. Form submit handler: Frontend validation for REQUIRED fields first + confirmation for OPTIONAL unpopulated fields
+    document.addEventListener('submit', function(e) {
+      const form = e.target;
+      if (form && form.id === 'ai_create_submission_form') {
+        if (form.dataset.confirmedSubmit === 'true') {
+          return;
+        }
+
+        const alertEl = document.getElementById('ai_form_validation_alert');
+        if (alertEl) alertEl.classList.add('hidden');
+
+        // Step 1: Validate all REQUIRED fields
+        const requiredInputs = form.querySelectorAll('input[required], textarea[required], select[required], [data-required-field="true"]');
+        const missingRequired = [];
+        let firstInvalidInput = null;
+
+        requiredInputs.forEach(input => {
+          if (input.type === 'hidden' || input.type === 'submit') return;
+
+          let isInvalid = false;
+          const val = input.value ? input.value.trim() : '';
+
+          if (input.type === 'checkbox') {
+            if (!input.checked) isInvalid = true;
+          } else if (input.type === 'email') {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!val || !emailRegex.test(val)) isInvalid = true;
+          } else {
+            if (!val) isInvalid = true;
+          }
+
+          if (isInvalid) {
+            const fieldName = input.dataset.fieldName || input.name;
+            if (!missingRequired.includes(fieldName)) {
+              missingRequired.push(fieldName);
+            }
+            if (!firstInvalidInput) {
+              firstInvalidInput = input;
+            }
+            input.classList.add('input-error', '!border-error');
+          } else {
+            input.classList.remove('input-error', '!border-error');
+          }
+        });
+
+        // If ANY REQUIRED field is missing or invalid, block submission and prompt user to complete it
+        if (missingRequired.length > 0) {
+          e.preventDefault();
+          if (firstInvalidInput) {
+            firstInvalidInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            firstInvalidInput.focus();
+            if (typeof firstInvalidInput.reportValidity === 'function') {
+              firstInvalidInput.reportValidity();
+            }
+          }
+          window.showAiFormValidationError(`Please complete all required fields (${missingRequired.join(', ')}) before submitting.`);
+          return;
+        }
+
+        // Step 2: All required fields are valid. Check for unpopulated OPTIONAL fields
+        const allInputs = form.querySelectorAll('input[data-field-name], textarea[data-field-name], select[data-field-name]');
+        const optionalMissing = [];
+        let firstOptionalInput = null;
+
+        allInputs.forEach(input => {
+          if (input.type === 'hidden' || input.type === 'checkbox' || input.type === 'submit') return;
+          if (input.hasAttribute('required') || input.dataset.requiredField === 'true') return;
+
+          const val = input.value ? input.value.trim() : '';
+          if (!val) {
+            const fieldName = input.dataset.fieldName;
+            if (fieldName && !optionalMissing.includes(fieldName)) {
+              optionalMissing.push(fieldName);
+            }
+            if (!firstOptionalInput) {
+              firstOptionalInput = input;
+            }
+          }
+        });
+
+        // If any optional fields are missing, display the confirmation prompt
+        if (optionalMissing.length > 0) {
+          e.preventDefault();
+          window.showMissingFieldsConfirmationModal(form, optionalMissing, firstOptionalInput);
+          return;
+        }
+
+        // Step 3: All fields (required and optional) are populated -> Submit immediately
+      }
+    });
+
+    // 2. Clear visual validation error highlights when user types
+    document.addEventListener('input', function(e) {
+      const input = e.target;
+      if (input && (input.classList.contains('input-error') || input.classList.contains('!border-error'))) {
+        if (input.value && input.value.trim()) {
+          input.classList.remove('input-error', '!border-error');
+          const alertEl = document.getElementById('ai_form_validation_alert');
+          if (alertEl) alertEl.classList.add('hidden');
+        }
+      }
+    });
+
+    // 3. Global Paste (Ctrl+V / Cmd+V) for images, PDFs, and text
     document.addEventListener('paste', function(e) {
       const wizard = document.getElementById('ai_submission_wizard');
       if (!wizard) return;

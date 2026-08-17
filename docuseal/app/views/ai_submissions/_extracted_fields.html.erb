@@ -17,7 +17,7 @@
 
   <!-- Form Fields Tab -->
   <div id="ai_tab_form" class="space-y-6">
-    <%= form_with url: ai_submissions_path, method: :post, id: 'ai_create_submission_form', local: true, class: 'space-y-6' do |f| %>
+    <%= form_with url: ai_submissions_path, method: :post, id: 'ai_create_submission_form', local: true, html: { novalidate: true }, class: 'space-y-6' do |f| %>
       <%= hidden_field_tag :template_id, template.id %>
 
       <% submitters.each_with_index do |sub, idx| %>
@@ -49,15 +49,15 @@
                 </label>
                 <span class="badge badge-xs badge-neutral font-mono text-[9px]">Destination</span>
               </div>
-              <%= email_field_tag "submission[submitters][#{idx}][email]", sub['email'], class: 'input input-sm input-bordered font-medium w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100', placeholder: 'Enter or confirm email address', required: true %>
+              <%= email_field_tag "submission[submitters][#{idx}][email]", sub['email'], class: 'input input-sm input-bordered font-medium w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100', placeholder: 'Enter or confirm email address', required: true, data: { field_name: 'Recipient Email', required_field: 'true' } %>
             </div>
 
             <!-- Recipient Name -->
             <div class="md:col-span-1">
               <label class="block text-xs font-bold text-base-content/90 mb-1">
-                Recipient Name (Auto-extracted)
+                Recipient Name (Auto-extracted) <span class="text-error font-bold">*</span>
               </label>
-              <%= text_field_tag "submission[submitters][#{idx}][name]", sub['name'], class: 'input input-sm input-bordered font-medium w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100', placeholder: 'Enter or confirm recipient name' %>
+              <%= text_field_tag "submission[submitters][#{idx}][name]", sub['name'], class: 'input input-sm input-bordered font-medium w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100', placeholder: 'Enter or confirm recipient name', required: true, data: { field_name: 'Recipient Name', required_field: 'true' } %>
             </div>
 
             <!-- Recipient Phone -->
@@ -65,7 +65,7 @@
               <label class="block text-xs font-bold text-base-content/90 mb-1">
                 Phone Number (Auto-extracted)
               </label>
-              <%= telephone_field_tag "submission[submitters][#{idx}][phone]", sub['phone'], class: 'input input-sm input-bordered font-medium w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100', placeholder: 'Enter or confirm phone number' %>
+              <%= telephone_field_tag "submission[submitters][#{idx}][phone]", sub['phone'], class: 'input input-sm input-bordered font-medium w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100', placeholder: 'Enter or confirm phone number', data: { field_name: 'Phone Number' } %>
             </div>
           </div>
 
@@ -111,6 +111,7 @@
                     <% val = (sub['values'] || {})[tf['name']] || fields[tf['name']] || '' %>
                     <% field_name = tf['name'].presence || 'Field' %>
                     <% en_trans = AiSubmissionExtractor.translation_for(tf['name'], tf['type']) %>
+                    <% is_required = [true, 'true', 1, '1'].include?(tf['required']) %>
                     <div class="<%= 'md:col-span-2' if ['Alamat Penghantaran ("Pihak B")', 'Alamat Penghantaran'].include?(tf['name']) %> bg-base-200/50 p-3 rounded-xl border border-base-200">
                       <div class="flex items-center justify-between mb-1.5">
                         <label class="text-xs font-semibold text-base-content truncate flex items-center space-x-1.5">
@@ -118,22 +119,22 @@
                           <% if en_trans.present? %>
                             <span class="text-[11px] text-neutral-700 font-medium italic">(<%= en_trans %>)</span>
                           <% end %>
-                          <% if [true, 'true', 1, '1'].include?(tf['required']) %><span class="text-error font-bold">*</span><% end %>
+                          <% if is_required %><span class="text-error font-bold">*</span><% end %>
                         </label>
                         <span class="badge badge-xs text-[10px] uppercase font-mono" style="background-color: #f4f4f5 !important; color: #18181b !important; border: 1px solid #e4e4e7 !important;"><%= tf['type'] %></span>
                       </div>
 
                       <% if tf['type'] == 'checkbox' %>
                         <label class="cursor-pointer label justify-start gap-2 py-1">
-                          <%= check_box_tag "submission[submitters][#{idx}][values][#{tf['name']}]", 'true', [true, 'true', '1', 1, 'yes'].include?(val), class: 'checkbox checkbox-sm checkbox-neutral rounded-lg', data: { field_name: tf['name'] } %>
+                          <%= check_box_tag "submission[submitters][#{idx}][values][#{tf['name']}]", 'true', [true, 'true', '1', 1, 'yes'].include?(val), class: 'checkbox checkbox-sm checkbox-neutral rounded-lg', required: is_required, data: { field_name: tf['name'], required_field: (is_required ? 'true' : nil) } %>
                           <span class="label-text text-xs text-base-content/80 font-medium">Checked / Agreed</span>
                         </label>
                       <% elsif tf['type'] == 'date' %>
-                        <%= date_field_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, class: 'input input-sm input-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium', data: { field_name: tf['name'] } %>
+                        <%= date_field_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, class: 'input input-sm input-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium', required: is_required, data: { field_name: tf['name'], required_field: (is_required ? 'true' : nil) } %>
                       <% elsif tf['type'] == 'textarea' || tf['name'].to_s.include?('Alamat') %>
-                        <%= text_area_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, rows: 2, class: 'textarea textarea-sm textarea-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium', data: { field_name: tf['name'] } %>
+                        <%= text_area_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, rows: 2, class: 'textarea textarea-sm textarea-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium', required: is_required, data: { field_name: tf['name'], required_field: (is_required ? 'true' : nil) } %>
                       <% else %>
-                        <%= text_field_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, class: 'input input-sm input-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium', placeholder: "Value for #{field_name}", data: { field_name: tf['name'] }, oninput: "if(['Harga Sewa Sebulan'].includes('#{tf['name']}')) { window.recalculateJumlahSewa && window.recalculateJumlahSewa(); }" %>
+                        <%= text_field_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, class: 'input input-sm input-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium', placeholder: "Value for #{field_name}", required: is_required, data: { field_name: tf['name'], required_field: (is_required ? 'true' : nil) }, oninput: "if(['Harga Sewa Sebulan'].includes('#{tf['name']}')) { window.recalculateJumlahSewa && window.recalculateJumlahSewa(); }" %>
                       <% end %>
                     </div>
                   <% end %>
@@ -158,6 +159,7 @@
                     <% val = AiSubmissionExtractor.processed_data_value(tf['name'], tf['type'], fields_hash: fields) if val.blank? %>
                     <% field_name = tf['name'].presence || 'Processed Field' %>
                     <% en_trans = AiSubmissionExtractor.translation_for(tf['name'], tf['type']) %>
+                    <% is_required = [true, 'true', 1, '1'].include?(tf['required']) %>
                     <div class="bg-base-200/50 p-3 rounded-xl border border-base-200">
                       <div class="flex items-center justify-between mb-1.5">
                         <label class="text-xs font-semibold text-base-content truncate flex items-center space-x-1.5">
@@ -170,15 +172,15 @@
                           <% elsif tf['name'].to_s.include?('Jumlah Sewa') %>
                             <span class="badge badge-xs font-mono text-[9px] bg-neutral-200 text-neutral-800 border-neutral-300">Rent × Duration</span>
                           <% end %>
-                          <% if [true, 'true', 1, '1'].include?(tf['required']) %><span class="text-error font-bold">*</span><% end %>
+                          <% if is_required %><span class="text-error font-bold">*</span><% end %>
                         </label>
                         <span class="badge badge-xs text-[10px] uppercase font-mono" style="background-color: #f4f4f5 !important; color: #18181b !important; border: 1px solid #e4e4e7 !important;"><%= tf['type'] %></span>
                       </div>
 
                       <% if tf['type'] == 'date' %>
-                        <%= date_field_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, class: 'input input-sm input-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium', data: { field_name: tf['name'] } %>
+                        <%= date_field_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, class: 'input input-sm input-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium', required: is_required, data: { field_name: tf['name'], required_field: (is_required ? 'true' : nil) } %>
                       <% else %>
-                        <%= text_field_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, class: 'input input-sm input-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium', placeholder: "Value for #{field_name}", data: { field_name: tf['name'] }, oninput: "if(['Jumlah Tempoh Sewaan', 'Tempoh Sewaan'].includes('#{tf['name']}')) { window.recalculateJumlahSewa && window.recalculateJumlahSewa(); }" %>
+                        <%= text_field_tag "submission[submitters][#{idx}][values][#{tf['name']}]", val, class: 'input input-sm input-bordered w-full text-xs rounded-xl focus:border-neutral-900 bg-base-100 font-medium', placeholder: "Value for #{field_name}", required: is_required, data: { field_name: tf['name'], required_field: (is_required ? 'true' : nil) }, oninput: "if(['Jumlah Tempoh Sewaan', 'Tempoh Sewaan'].includes('#{tf['name']}')) { window.recalculateJumlahSewa && window.recalculateJumlahSewa(); }" %>
                       <% end %>
                     </div>
                   <% end %>
@@ -227,6 +229,14 @@
 
       <% end %>
 
+      <!-- Validation Error Alert Banner -->
+      <div id="ai_form_validation_alert" class="hidden text-xs p-3.5 rounded-xl font-bold shadow-md flex items-center space-x-2.5" style="background-color: #dc2626 !important; color: #ffffff !important; border: 1px solid #b91c1c !important;">
+        <div class="p-1 rounded-lg flex-shrink-0 bg-white/20">
+          <%= svg_icon('alert_circle', class: 'w-4 h-4 stroke-2 text-white') %>
+        </div>
+        <span id="ai_form_validation_alert_text" class="font-bold text-white text-xs" style="color: #ffffff !important;"></span>
+      </div>
+
       <!-- Bottom Action Bar -->
       <div class="pt-3 flex items-center justify-between">
         <button type="button" id="reupload_btn" data-action="reupload" class="btn btn-ghost btn-sm text-xs gap-1.5 rounded-xl font-medium cursor-pointer">
@@ -253,3 +263,36 @@
   </div>
 
 </div>
+
+<!-- Missing Fields Confirmation Modal -->
+<dialog id="ai_missing_fields_modal" class="modal modal-bottom sm:modal-middle">
+  <div class="modal-box bg-base-100 border border-base-300 rounded-2xl p-6 shadow-2xl max-w-md text-left">
+    <div class="flex items-center space-x-3 mb-3">
+      <div class="p-2.5 bg-amber-500/15 text-amber-600 rounded-xl flex-shrink-0">
+        <%= svg_icon('alert_circle', class: 'w-6 h-6 stroke-2') %>
+      </div>
+      <div>
+        <h3 class="font-bold text-sm text-base-content uppercase tracking-wider">Optional Fields Notice</h3>
+        <p class="text-[11px] text-base-content/60 font-medium">Some optional fields in your form are not populated</p>
+      </div>
+    </div>
+    
+    <div class="py-3 px-1">
+      <p id="ai_missing_fields_message" class="text-xs text-base-content/90 leading-relaxed font-normal">
+        <!-- Missing fields message populated dynamically -->
+      </p>
+    </div>
+
+    <div class="modal-action flex items-center justify-end space-x-2 pt-3 border-t border-base-200">
+      <button type="button" id="ai_missing_fields_back_btn" class="btn btn-ghost btn-sm text-xs font-semibold rounded-xl cursor-pointer">
+        Go Back
+      </button>
+      <button type="button" id="ai_missing_fields_continue_btn" class="btn btn-neutral !bg-neutral-900 hover:!bg-black !text-white btn-sm text-xs font-bold rounded-xl px-5 cursor-pointer">
+        Continue
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
