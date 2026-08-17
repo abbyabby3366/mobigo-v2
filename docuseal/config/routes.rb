@@ -41,9 +41,6 @@ Rails.application.routes.draw do
       resources :clone, only: %i[create], controller: 'templates_clone'
       resources :submissions, only: %i[index create]
     end
-    resources :ai_submissions, only: %i[] do
-      post :extract, on: :collection
-    end
     resources :tools, only: %i[] do
       post :merge, on: :collection
       post :verify, on: :collection
@@ -53,6 +50,8 @@ Rails.application.routes.draw do
       resources :submission_events, only: %i[index], path: 'submission/:type'
     end
   end
+
+  post 'api/ai_submissions/extract', to: 'api/ai_submissions#extract'
 
   resources :verify_pdf_signature, only: %i[create]
   resource :mfa_setup, only: %i[show new edit create destroy], controller: 'mfa_setup'

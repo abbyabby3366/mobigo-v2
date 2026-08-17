@@ -27,16 +27,16 @@ export interface BufferedFile {
 
 export class MobigoAiService {
   /**
-   * Process all collected files and text notes by sending directly to Mobigo / DocuSeal endpoint.
+   * Process all collected files and text notes by sending directly to
+   * Mobigo / DocuSeal endpoint as multipart/form-data.
    */
   static async extractContractData(
     textNotes: string[],
     files: BufferedFile[],
     templateId: number = 3
   ): Promise<ExtractedDocumentData> {
-    // Determine base URL (inside Docker network: http://app:3000, or external: MOBIGO_API_URL)
     const baseUrl = (process.env.DOCUSEAL_API_URL || process.env.MOBIGO_API_URL || 'http://app:3000').replace(/\/+$/, '');
-    const apiKey = process.env.DOCUSEAL_API_KEY || process.env.MOBIGO_IO7_MY_API_KEY || '9ewYoE91wx1p8hASHVMaoJBuvA4uP2vyU14WaPMGAe6';
+    const apiKey = process.env.DOCUSEAL_API_KEY || process.env.MOBIGO_IO7_MY_API_KEY || '';
 
     const formData = new FormData();
     formData.append('template_id', String(templateId));
@@ -55,13 +55,13 @@ export class MobigoAiService {
     }
 
     const endpoint = `${baseUrl}/api/ai_submissions/extract`;
-    console.log(`[MobigoAiService] Sending document extraction request to Mobigo endpoint: ${endpoint} (template_id: ${templateId})`);
+    console.log(`[MobigoAiService] POST ${endpoint} (template_id: ${templateId}, files: ${files.length}, notes: ${textNotes.length})`);
 
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
+        // Do not set Content-Type header manually; fetch automatically sets multipart/form-data boundary
         'X-Auth-Token': apiKey,
-        Authorization: `Bearer ${apiKey}`,
       },
       body: formData,
       signal: AbortSignal.timeout(60000),
@@ -76,7 +76,7 @@ export class MobigoAiService {
     const firstSub = data.submitters?.[0] || {};
     const values = firstSub.values || data.fields || data.extracted || data || {};
 
-    // Format and normalize extracted fields
+    // Map DocuSeal field names to our internal names
     const nameVal = firstSub.name || values['Name'] || values['Nama'] || values['name'] || '';
     const emailVal = firstSub.email || values['Email'] || values['email'] || '';
     const phoneVal = firstSub.phone || values['Nombor Telefon'] || values['phone_number'] || '';
@@ -97,7 +97,7 @@ export class MobigoAiService {
     const productPrice = values['Harga Produk'] || values['product_price'] || '';
     const orderNum = values['Nombor Pesanan'] || values['order_number'] || '';
 
-    const extracted: ExtractedDocumentData = {
+    return {
       name: nameVal,
       email: emailVal,
       phone_number: phoneVal,
@@ -112,7 +112,5 @@ export class MobigoAiService {
       order_number: orderNum,
       ...values,
     };
-
-    return extracted;
   }
 }

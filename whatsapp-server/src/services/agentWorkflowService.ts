@@ -280,7 +280,7 @@ export class AgentWorkflowService {
       await sendTextMessage(
         sessionId,
         session.chatJid,
-        `⚠️ *No draft files received yet.*\n\nPlease send customer photos (e.g. IC, payslips) or text details first, then send */ai*.`
+        `⚠️ *No data received yet.*\n\nPlease send customer photos (e.g. IC, payslips), documents, or text details first, then send */ai*.`
       );
       return;
     }

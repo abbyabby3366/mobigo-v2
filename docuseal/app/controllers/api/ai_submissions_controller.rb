@@ -2,15 +2,22 @@
 
 module Api
   class AiSubmissionsController < ApiBaseController
+    skip_before_action :verify_authenticity_token, raise: false
     before_action -> { authorize!(:create, Submission) }
     before_action :load_template, only: %i[extract create]
+
+    rescue_from JSON::ParserError do |e|
+      Rails.logger.error("JSON::ParserError in AiSubmissionsController: #{e.message}\n#{e.backtrace&.join("\n")}")
+      render json: { error: "JSON parse error: #{e.message}" }, status: :unprocessable_entity
+    end
 
     def extract
       text_data = params[:text].presence || params[:text_notes].to_s
       files_data = params[:files] || []
 
       if text_data.blank? && files_data.blank?
-        return render json: { error: 'Please provide some text or upload files to extract data.' }, status: :unprocessable_entity
+        return render json: { error: 'Please provide some text or upload files to extract data.' },
+                      status: :unprocessable_entity
       end
 
       result = AiSubmissionExtractor.call(
@@ -27,7 +34,8 @@ module Api
 
         render json: result
       else
-        render json: { error: result[:error] || 'Failed to extract data using AI.' }, status: :unprocessable_entity
+        render json: { error: result[:error] || 'Failed to extract data using AI.' },
+               status: :unprocessable_entity
       end
     rescue StandardError => e
       Rails.logger.error("API AI Extraction error: #{e.message}\n#{e.backtrace.join("\n")}")
