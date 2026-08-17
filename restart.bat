@@ -25,6 +25,8 @@ docker compose ps
 
 echo.
 echo ===================================
-echo DocuSeal is ready at http://localhost:3000
+echo DocuSeal:         http://localhost:3000
+echo WhatsApp Server:  http://localhost:4000
+echo WhatsApp QR Code: http://localhost:4000/api/session/qr
 echo ===================================
 endlocal

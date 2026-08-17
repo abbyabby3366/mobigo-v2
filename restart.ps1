@@ -57,5 +57,7 @@ Write-Host "`nChecking status..." -ForegroundColor Cyan
 docker compose ps
 
 Write-Host "`n===================================" -ForegroundColor Green
-Write-Host "DocuSeal is ready at http://localhost:3000" -ForegroundColor Green
+Write-Host "DocuSeal:         http://localhost:3000" -ForegroundColor Green
+Write-Host "WhatsApp Server:  http://localhost:4000" -ForegroundColor Green
+Write-Host "WhatsApp QR Code: http://localhost:4000/api/session/qr" -ForegroundColor Green
 Write-Host "===================================" -ForegroundColor Green

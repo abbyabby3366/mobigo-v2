@@ -1,0 +1,36 @@
+{
+  "name": "mobigo-whatsapp-server",
+  "version": "1.0.0",
+  "description": "Standalone WhatsApp Server for Mobigo DocuSeal Integration",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "github:JonathanChuahE-Jay/Baileys",
+    "axios": "^1.7.9",
+    "baileys": "github:JonathanChuahE-Jay/Baileys",
+    "cors": "^2.8.5",
+    "dayjs": "^1.11.13",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "form-data": "^4.0.2",
+    "ioredis": "^5.6.0",
+    "multer": "^1.4.5-lts.1",
+    "pino": "^9.14.0",
+    "qrcode": "^1.5.4",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^22.13.10",
+    "@types/qrcode": "^1.5.5",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}

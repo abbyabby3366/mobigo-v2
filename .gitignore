@@ -29,3 +29,7 @@ Thumbs.db
 Desktop.ini
 .vscode/
 .idea/
+sessions/
+uploads/
+dist/
+

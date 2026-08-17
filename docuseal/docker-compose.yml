@@ -51,8 +51,26 @@ services:
     environment:
       - HOST=${HOST}
 
+  whatsapp:
+    build:
+      context: ../whatsapp-server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - 4000:4000
+    volumes:
+      - whatsapp_sessions:/app/sessions
+    env_file:
+      - path: ../whatsapp-server/.env
+        required: false
+    environment:
+      - PORT=4000
+      - TZ=Asia/Singapore
+      - DOCUSEAL_API_URL=http://app:3000
+
 volumes:
   pg_data:
   docuseal_data:
   caddy_data:
+  whatsapp_sessions:
 
