@@ -50,8 +50,8 @@ if (Test-Path (Join-Path $scriptDir "docuseal\docker-compose.yml")) {
 Write-Host "`nStopping containers..." -ForegroundColor Yellow
 docker compose down
 
-Write-Host "`nStarting containers..." -ForegroundColor Green
-docker compose up -d
+Write-Host "`nStarting containers with build..." -ForegroundColor Green
+docker compose up -d --build
 
 Write-Host "`nChecking status..." -ForegroundColor Cyan
 docker compose ps

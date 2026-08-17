@@ -526,10 +526,11 @@ export function renderDashboardHtml(): string {
 
     function selectChatContact(phone, name) {
       activeChatPhone = phone;
-      const phoneLabel = phone && phone.length <= 13 ? '+' + phone : '';
+      const isLid = phone && (phone.length > 13 || phone.startsWith('112') || phone.startsWith('202'));
+      const phoneLabel = !isLid && phone && phone.length <= 13 ? '+' + phone : '';
       const titleName = name || phoneLabel || 'WhatsApp Contact';
       document.getElementById('chatActiveName').textContent = titleName;
-      document.getElementById('chatActivePhone').textContent = phoneLabel || (name ? 'WhatsApp Account' : phone);
+      document.getElementById('chatActivePhone').textContent = phoneLabel || (name ? 'WhatsApp Account' : 'ID: ' + phone);
       document.getElementById('chatHeaderActions').style.display = 'flex';
       renderChatContacts(allConversations);
       loadMessagesForActiveChat(phone);

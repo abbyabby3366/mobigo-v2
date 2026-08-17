@@ -305,14 +305,14 @@ export class AgentWorkflowService {
     await this.saveSession(session);
 
     const templatePrompt =
-      `📑 *Select Document Template to Process:*\n` +
+      `📑 *Which template should I use?*\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `1️⃣ *Phone Rental Service Template*\n` +
-      `   • Phone Rental Agreement, Device Specs & Rental Fees\n\n` +
+      `   • Phone Rental Agreement, Device Details & Fees\n\n` +
       `2️⃣ *CTOS CBM - Consent Form*\n` +
-      `   • Credit Evaluation & Consent Form\n` +
+      `   • Credit Check Consent Form\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-      `👉 *Reply with 1 or 2 to choose your template and start AI extraction.*`;
+      `👉 *Answer 1 or 2 to select the template.*`;
 
     await sendTextMessage(sessionId, session.chatJid, templatePrompt);
   }
@@ -332,7 +332,8 @@ export class AgentWorkflowService {
     );
 
     try {
-      const extracted = await MobigoAiService.extractContractData(session.textNotes, session.bufferedFiles);
+      const templateId = session.selectedTemplateId || 3;
+      const extracted = await MobigoAiService.extractContractData(session.textNotes, session.bufferedFiles, templateId);
 
       // Smart Defaults for missing contract values
       if (!extracted.order_number || extracted.order_number.trim() === '') {
@@ -380,13 +381,33 @@ export class AgentWorkflowService {
     const year = String(now.getFullYear());
     const currentDate = `${day}/${month}/${year}`;
 
-    const templateName = session.selectedTemplateId === 5
-      ? 'CTOS CBM - Consent Form'
-      : 'Phone Rental Service Template';
+    if (session.selectedTemplateId === 5) {
+      // Template 5: CTOS CBM Consent Form
+      const reviewMsg =
+        `📋 *Mobigo Contract Draft Details*\n` +
+        `📑 *Template:* CTOS CBM - Consent Form\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `👤 *1. RECIPIENT & DELIVERY INFO*\n` +
+        `1. *Recipient Name:* ${d.name || '_(Missing)_'}\n` +
+        `2. *Recipient Email:* ${d.email || '_(Missing)_'} 📬 _(Destination)_\n` +
+        `3. *Recipient Phone:* ${d.phone_number || '_(Missing)_'}\n\n` +
+        `📄 *2. CONSENT & IC DETAILS*\n` +
+        `4. *No. Kad Pengenalan:* ${d.ic_number || '_(Missing)_'}\n` +
+        `5. *Tarikh Borang:* ${currentDate}\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `✍️ *To edit any field:* Reply with number and value:\n` +
+        `_Example:_ *2 customer@email.com*\n` +
+        `_Example:_ *4 890425-02-5957*\n\n` +
+        `👉 Send */proceed* to create DocuSeal signing link!`;
 
+      await sendTextMessage(sessionId, session.chatJid, reviewMsg);
+      return;
+    }
+
+    // Default: Template 3 (Phone Rental Service Template)
     const reviewMsg =
       `📋 *Mobigo Contract Draft Details*\n` +
-      `📑 *Template:* ${templateName}\n` +
+      `📑 *Template:* Phone Rental Service Template\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `👤 *1. RECIPIENT & DELIVERY INFO (First Party)*\n` +
       `1. *Recipient Name:* ${d.name || '_(Missing)_'}\n` +
@@ -408,6 +429,7 @@ export class AgentWorkflowService {
       `_Example:_ *2 customer@email.com*\n` +
       `_Example:_ *3 01153565717*\n` +
       `_Example:_ *5 No 12 Jalan Merdeka, KL*\n` +
+      `_Example:_ *7 IMEI1: 354704736663104 / IMEI2: 354704736663112*\n` +
       `_Example:_ *8 RM 150*\n\n` +
       `👉 Send */proceed* to create DocuSeal signing link!`;
 
@@ -435,27 +457,37 @@ export class AgentWorkflowService {
         val = `RM ${val}`;
       }
 
-      switch (fieldIdx) {
-        case 1: d.name = val; break;
-        case 2: d.email = val; break;
-        case 3: d.phone_number = val; break;
-        case 4: d.ic_number = val; break;
-        case 5: d.address = val; break;
-        case 6: d.product_name = val; break;
-        case 7: d.imei = val; break;
-        case 8:
-          d.monthly_rent = val;
-          // Auto calculate total rent (12 months) if missing
-          const rentNum = parseFloat(val.replace(/[^0-9.]/g, ''));
-          if (!isNaN(rentNum) && (!d.total_rent || d.total_rent === '-')) {
-            d.total_rent = `RM ${rentNum * 12}`;
-          }
-          break;
-        case 9: d.total_rent = val; break;
-        case 10: d.deposit = val; break;
-        case 11: d.product_price = val; break;
-        case 12: d.order_number = val; break;
-        default: return false;
+      if (session.selectedTemplateId === 5) {
+        switch (fieldIdx) {
+          case 1: d.name = val; break;
+          case 2: d.email = val; break;
+          case 3: d.phone_number = val; break;
+          case 4: d.ic_number = val; break;
+          default: return false;
+        }
+      } else {
+        switch (fieldIdx) {
+          case 1: d.name = val; break;
+          case 2: d.email = val; break;
+          case 3: d.phone_number = val; break;
+          case 4: d.ic_number = val; break;
+          case 5: d.address = val; break;
+          case 6: d.product_name = val; break;
+          case 7: d.imei = val; break;
+          case 8:
+            d.monthly_rent = val;
+            // Auto calculate total rent (12 months) if missing
+            const rentNum = parseFloat(val.replace(/[^0-9.]/g, ''));
+            if (!isNaN(rentNum) && (!d.total_rent || d.total_rent === '-')) {
+              d.total_rent = `RM ${rentNum * 12}`;
+            }
+            break;
+          case 9: d.total_rent = val; break;
+          case 10: d.deposit = val; break;
+          case 11: d.product_price = val; break;
+          case 12: d.order_number = val; break;
+          default: return false;
+        }
       }
 
       session.extractedData = d;

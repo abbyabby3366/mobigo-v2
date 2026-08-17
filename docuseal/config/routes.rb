@@ -41,6 +41,9 @@ Rails.application.routes.draw do
       resources :clone, only: %i[create], controller: 'templates_clone'
       resources :submissions, only: %i[index create]
     end
+    resources :ai_submissions, only: %i[] do
+      post :extract, on: :collection
+    end
     resources :tools, only: %i[] do
       post :merge, on: :collection
       post :verify, on: :collection
