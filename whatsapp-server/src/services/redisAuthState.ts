@@ -7,8 +7,11 @@ import {
   BufferJSON,
 } from 'baileys';
 import { Redis } from 'ioredis';
+import fs from 'fs';
+import path from 'path';
 
 let redisClient: Redis | null = null;
+const SESSIONS_DIR = process.env.SESSIONS_DIR || './sessions';
 
 export function getRedisClient(): Redis | null {
   if (redisClient) return redisClient;
@@ -44,37 +47,64 @@ export async function useRedisAuthState(sessionId: string): Promise<{
   saveCreds: () => Promise<void>;
   clearCreds: () => Promise<void>;
 }> {
-  const redis = getRedisClient();
-  if (!redis) {
-    throw new Error('Redis client not configured. Set REDIS_HOST in environment variables.');
+  const sessionLocalDir = path.join(SESSIONS_DIR, sessionId);
+  if (!fs.existsSync(sessionLocalDir)) {
+    fs.mkdirSync(sessionLocalDir, { recursive: true });
   }
+
+  const credsFile = path.join(sessionLocalDir, 'creds.json');
+  const redis = getRedisClient();
 
   const credsKey = `wa_session:${sessionId}:creds`;
   const keysPrefix = `wa_session:${sessionId}:keys:`;
 
-  const readData = async (key: string) => {
-    try {
-      const data = await redis.get(key);
-      if (!data) return null;
-      return JSON.parse(data, BufferJSON.reviver);
-    } catch (_) {
-      return null;
+  const readData = async (key: string, localFileName?: string) => {
+    if (redis) {
+      try {
+        const data = await redis.get(key);
+        if (data) return JSON.parse(data, BufferJSON.reviver);
+      } catch (_) {}
     }
-  };
 
-  const writeData = async (key: string, value: any) => {
-    try {
-      if (value === null || value === undefined) {
-        await redis.del(key);
-      } else {
-        await redis.set(key, JSON.stringify(value, BufferJSON.replacer));
+    if (localFileName) {
+      const filePath = path.join(sessionLocalDir, localFileName);
+      if (fs.existsSync(filePath)) {
+        try {
+          return JSON.parse(fs.readFileSync(filePath, 'utf-8'), BufferJSON.reviver);
+        } catch (_) {}
       }
-    } catch (err) {
-      console.error(`[Redis] Error writing key ${key}:`, err);
+    }
+    return null;
+  };
+
+  const writeData = async (key: string, value: any, localFileName?: string) => {
+    // Write local backup first
+    if (localFileName) {
+      const filePath = path.join(sessionLocalDir, localFileName);
+      try {
+        if (value === null || value === undefined) {
+          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        } else {
+          fs.writeFileSync(filePath, JSON.stringify(value, BufferJSON.replacer));
+        }
+      } catch (_) {}
+    }
+
+    // Write to Redis
+    if (redis) {
+      try {
+        if (value === null || value === undefined) {
+          await redis.del(key);
+        } else {
+          await redis.set(key, JSON.stringify(value, BufferJSON.replacer));
+        }
+      } catch (_) {
+        // Silently caught so Redis OOM doesn't crash the server
+      }
     }
   };
 
-  const rawCreds = await readData(credsKey);
+  const rawCreds = await readData(credsKey, 'creds.json');
   const creds: AuthenticationCreds = rawCreds || initAuthCreds();
 
   return {
@@ -84,7 +114,8 @@ export async function useRedisAuthState(sessionId: string): Promise<{
         get: async (type, ids) => {
           const data: { [id: string]: any } = {};
           for (const id of ids) {
-            const value = await readData(`${keysPrefix}${type}:${id}`);
+            const localName = `${type}_${id.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`;
+            const value = await readData(`${keysPrefix}${type}:${id}`, localName);
             if (value) {
               if (type === 'app-state-sync-key' && value) {
                 data[id] = proto.Message.AppStateSyncKeyData.fromObject(value);
@@ -101,7 +132,8 @@ export async function useRedisAuthState(sessionId: string): Promise<{
             for (const id in data[category as keyof SignalDataTypeMap]) {
               const value = data[category as keyof SignalDataTypeMap]![id];
               const key = `${keysPrefix}${category}:${id}`;
-              tasks.push(writeData(key, value));
+              const localName = `${category}_${id.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`;
+              tasks.push(writeData(key, value, localName));
             }
           }
           await Promise.all(tasks);
@@ -109,12 +141,22 @@ export async function useRedisAuthState(sessionId: string): Promise<{
       },
     },
     saveCreds: async () => {
-      await writeData(credsKey, creds);
+      await writeData(credsKey, creds, 'creds.json');
     },
     clearCreds: async () => {
-      const keys = await redis.keys(`wa_session:${sessionId}:*`);
-      if (keys.length > 0) {
-        await redis.del(...keys);
+      try {
+        if (fs.existsSync(sessionLocalDir)) {
+          fs.rmSync(sessionLocalDir, { recursive: true, force: true });
+        }
+      } catch (_) {}
+
+      if (redis) {
+        try {
+          const keys = await redis.keys(`wa_session:${sessionId}:*`);
+          if (keys.length > 0) {
+            await redis.del(...keys);
+          }
+        } catch (_) {}
       }
     },
   };

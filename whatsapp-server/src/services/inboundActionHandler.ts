@@ -1,14 +1,16 @@
 import { InboundMessageEvent } from '../types/index.js';
 import { docusealService } from './docusealService.js';
-import { getActiveSession, sendTextMessage } from './baileysManager.js';
 
 export async function handleInboundEvent(event: InboundMessageEvent): Promise<void> {
-  const { sessionId, senderPhone, pushName, text, hasMedia, mediaType, fileName, fileBuffer, mimetype } = event;
+  const { sessionId, senderPhone, pushName, text, hasMedia, mediaType, fileName, fileBuffer, mimetype, replySender } = event;
+
+  const sendReply = async (toPhone: string, replyText: string): Promise<any> => {
+    if (replySender) {
+      return replySender(toPhone, replyText);
+    }
+  };
 
   console.log(`[Inbound Action] Message from ${pushName || senderPhone} (${senderPhone}) | Media: ${hasMedia ? mediaType : 'None'}`);
-
-  const active = getActiveSession(sessionId);
-  if (!active) return;
 
   // 1. If an admin notification phone number is configured, send alert
   const adminPhone = process.env.ADMIN_NOTIFY_PHONE;
@@ -17,8 +19,8 @@ export async function handleInboundEvent(event: InboundMessageEvent): Promise<vo
       ? `🔔 *Mobigo Alert:* New ${mediaType} received from *${pushName || senderPhone}* (+${senderPhone})\n📄 File: ${fileName || 'Document'}\n💬 Caption: ${text || 'None'}`
       : `🔔 *Mobigo Alert:* Message from *${pushName || senderPhone}* (+${senderPhone}):\n"${text}"`;
 
-    sendTextMessage(sessionId, adminPhone, adminText).catch((err) => {
-      console.warn('[Inbound Action] Failed to notify admin phone:', err.message);
+    sendReply(adminPhone, adminText).catch((err: any) => {
+      console.warn('[Inbound Action] Failed to notify admin phone:', err?.message || err);
     });
   }
 
@@ -72,23 +74,29 @@ export async function handleInboundEvent(event: InboundMessageEvent): Promise<vo
         ? `✅ *Document Received!*\n\nHello ${pushName || 'there'}, we have prepared your submission.\n\nPlease review and complete the signing process here:\n👉 ${signingUrl}\n\nThank you!`
         : `✅ *Document Received!*\n\nHello ${pushName || 'there'}, your document *"${docName}"* has been received and processed successfully.`;
 
-      await sendTextMessage(sessionId, senderPhone, replyText);
+      await sendReply(senderPhone, replyText);
     } catch (err: any) {
-      console.error('[Inbound Action] Error processing received document for submission:', err.message);
-      await sendTextMessage(
-        sessionId,
+      console.error('[Inbound Action] Error processing received document for submission:', err?.message || err);
+      await sendReply(
         senderPhone,
-        `⚠️ We received your file, but encountered an issue processing the submission: ${err.message}`
+        `⚠️ We received your file, but encountered an issue processing the submission: ${err?.message || err}`
       ).catch(() => {});
     }
     return;
   }
 
-  // 3. Action: Handle text commands or inquiry
+  // 3. Action: Handle text commands or general inquiry
   const normalizedText = (text || '').trim().toLowerCase();
 
-  if (normalizedText === 'hi' || normalizedText === 'hello' || normalizedText === 'start') {
-    const welcomeMsg = `👋 Hello ${pushName || ''}!\n\nWelcome to *Mobigo*.\n\nTo create a document submission, simply send your document (PDF or image) here and our system will generate your signing link.`;
-    await sendTextMessage(sessionId, senderPhone, welcomeMsg);
+  if (normalizedText === 'hi' || normalizedText === 'hello' || normalizedText === 'help' || normalizedText === 'menu') {
+    const welcomeMsg =
+      `👋 *Hello ${pushName || ''}!*\n\n` +
+      `Welcome to *Mobigo WhatsApp Services*.\n\n` +
+      `📌 *Available Options:*\n` +
+      `• *For Customers:* Send your document (PDF or image) to receive a direct signing link.\n` +
+      `• *For Sales Agents:* Send */start* to launch the *AI Document Processing Agent* (collect ICs, payslips, extract with */ai*, and generate DocuSeal contracts).\n\n` +
+      `💡 _Send */start* or */help* anytime for assistance._`;
+
+    await sendReply(senderPhone, welcomeMsg);
   }
 }

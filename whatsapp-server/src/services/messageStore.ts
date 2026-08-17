@@ -43,6 +43,7 @@ export interface IChatConversation {
   last_timestamp: string;
   unread_count: number;
   total_messages: number;
+  is_agent?: boolean;
 }
 
 // In-memory list (capped at 5000 recent messages)
@@ -88,22 +89,20 @@ export class MessageStore {
             messageCache = arr;
           }
         }
-      } catch (err) {
-        console.error('[MessageStore] Redis load error:', err);
-      }
+      } catch (_) {}
     }
   }
 
-  static async logMessage(msg: Omit<IChatMessage, 'id' | 'timestamp'> & { id?: string; timestamp?: string }): Promise<IChatMessage> {
+  static async logMessage(msg: Partial<IChatMessage>): Promise<IChatMessage> {
     await this.init();
 
     const newMsg: IChatMessage = {
       id: msg.id || `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      session_id: msg.session_id,
-      direction: msg.direction,
-      from_phone: msg.from_phone,
-      to_phone: msg.to_phone,
-      contact_phone: msg.contact_phone.replace(/[^0-9]/g, ''),
+      session_id: msg.session_id || 'mobigo_main',
+      direction: msg.direction || MessageDirection.OUTBOUND,
+      from_phone: msg.from_phone || '',
+      to_phone: msg.to_phone || '',
+      contact_phone: msg.contact_phone || msg.to_phone || msg.from_phone || '',
       contact_name: msg.contact_name || '',
       text: msg.text || '',
       has_media: msg.has_media || false,
@@ -115,11 +114,15 @@ export class MessageStore {
     };
 
     messageCache.push(newMsg);
+
+    // Keep cache capped at 5000 items
     if (messageCache.length > 5000) {
       messageCache = messageCache.slice(-5000);
     }
 
+    // Async persist to disk and Redis
     this.persist();
+
     return newMsg;
   }
 
@@ -138,6 +141,20 @@ export class MessageStore {
       if (!phone) continue;
 
       const snippet = m.text || (m.has_media ? `[${m.media_type || 'Media'}] ${m.file_name || ''}` : '');
+      const isAgentMsg = !!(m.text && (
+        m.text.includes('/start') ||
+        m.text.includes('/ai') ||
+        m.text.includes('/proceed') ||
+        m.text.includes('proceed') ||
+        m.text.includes('/reset') ||
+        m.text.includes('/stop') ||
+        m.text.includes('Mobigo AI') ||
+        m.text.includes('DocuSeal Submission') ||
+        m.text.includes('Extracted Document') ||
+        m.text.includes('Phone Rental Service') ||
+        m.text.includes('CTOS CBM')
+      ));
+
       const existing = map.get(phone);
 
       if (!existing) {
@@ -149,11 +166,15 @@ export class MessageStore {
           last_timestamp: m.timestamp,
           unread_count: m.direction === MessageDirection.INBOUND ? 1 : 0,
           total_messages: 1,
+          is_agent: isAgentMsg,
         });
       } else {
         existing.last_message = snippet || existing.last_message;
         existing.last_timestamp = m.timestamp;
         existing.total_messages += 1;
+        if (isAgentMsg) {
+          existing.is_agent = true;
+        }
         if (m.contact_name && !existing.contact_name.startsWith('+')) {
           existing.contact_name = m.contact_name;
         }

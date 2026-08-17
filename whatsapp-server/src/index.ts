@@ -9,6 +9,7 @@ import webhookRoutes from './routes/webhookRoutes.js';
 import { restoreAllSessions } from './services/baileysManager.js';
 import { SessionStore } from './services/sessionStore.js';
 import { MessageStore } from './services/messageStore.js';
+import { AgentWorkflowService } from './services/agentWorkflowService.js';
 import { renderDashboardHtml } from './views/dashboardHtml.js';
 
 dotenv.config();
@@ -69,6 +70,7 @@ app.listen(PORT, async () => {
   try {
     await SessionStore.init();
     await MessageStore.init();
+    await AgentWorkflowService.init();
     await restoreAllSessions();
   } catch (err: any) {
     console.warn(`[Startup] WhatsApp session bootstrap deferred:`, err.message);

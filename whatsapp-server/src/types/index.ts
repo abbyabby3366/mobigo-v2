@@ -50,4 +50,5 @@ export interface InboundMessageEvent {
   mimetype?: string;
   fileBuffer?: Buffer;
   timestamp: Date;
+  replySender?: (toPhone: string, text: string) => Promise<any>;
 }

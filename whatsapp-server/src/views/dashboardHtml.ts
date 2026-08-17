@@ -121,6 +121,13 @@ export function renderDashboardHtml(): string {
             </button>
           </div>
           <input id="chatSearchInput" oninput="filterChatList()" type="text" placeholder="Search contacts or number..." class="w-full text-xs h-8 px-3 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"/>
+          <div class="flex items-center justify-between pt-1 px-0.5">
+            <label class="inline-flex items-center gap-2 cursor-pointer select-none text-xs font-medium text-slate-700 hover:text-emerald-700">
+              <input type="checkbox" id="onlyAgentsFilter" onchange="filterChatList()" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5 cursor-pointer">
+              <span>🤖 Only Agents</span>
+            </label>
+            <span id="chatCountBadge" class="text-[10px] font-mono text-slate-400"></span>
+          </div>
         </div>
 
         <div id="chatContactsList" class="flex-1 overflow-y-auto divide-y divide-slate-100">
@@ -473,7 +480,7 @@ export function renderDashboardHtml(): string {
         const res = await fetch('/api/chats');
         const data = await res.json();
         allConversations = data.conversations || [];
-        renderChatContacts(allConversations);
+        filterChatList();
 
         if (activeChatPhone) {
           loadMessagesForActiveChat(activeChatPhone);
@@ -486,7 +493,7 @@ export function renderDashboardHtml(): string {
     function renderChatContacts(convs) {
       const container = document.getElementById('chatContactsList');
       if (!convs || convs.length === 0) {
-        container.innerHTML = '<div class="p-8 text-center text-xs text-slate-400">No chat history yet. Receive or send a message to start!</div>';
+        container.innerHTML = '<div class="p-8 text-center text-xs text-slate-400">No conversations matching filter.</div>';
         return;
       }
 
@@ -494,15 +501,20 @@ export function renderDashboardHtml(): string {
         const isActive = c.contact_phone === activeChatPhone;
         const activeClass = isActive ? 'bg-emerald-50 border-r-4 border-emerald-600' : 'hover:bg-slate-50';
         const timeStr = c.last_timestamp ? new Date(c.last_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        const phoneLabel = c.contact_phone && c.contact_phone.length <= 13 ? '+' + c.contact_phone : '';
+        const titleName = c.contact_name || phoneLabel || 'WhatsApp Contact';
 
         return \`
-          <div onclick="selectChatContact('\${c.contact_phone}', '\${c.contact_name}')" class="p-3.5 flex items-center gap-3 cursor-pointer transition \${activeClass}">
-            <div class="w-10 h-10 rounded-full bg-emerald-600/10 text-emerald-700 font-bold flex items-center justify-center text-xs shrink-0">
-              👤
+          <div onclick="selectChatContact('\${c.contact_phone}', '\${c.contact_name || ''}')" class="p-3.5 flex items-center gap-3 cursor-pointer transition \${activeClass}">
+            <div class="w-10 h-10 rounded-full \${c.is_agent ? 'bg-purple-100 text-purple-700' : 'bg-emerald-600/10 text-emerald-700'} font-bold flex items-center justify-center text-xs shrink-0">
+              \${c.is_agent ? '🤖' : '👤'}
             </div>
             <div class="flex-1 min-w-0">
               <div class="flex justify-between items-center mb-0.5">
-                <span class="font-bold text-xs text-slate-900 truncate">\${c.contact_name || '+' + c.contact_phone}</span>
+                <div class="flex items-center gap-1.5 truncate">
+                  <span class="font-bold text-xs text-slate-900 truncate">\${titleName}</span>
+                  \${c.is_agent ? '<span class="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 text-purple-800 border border-purple-200 shrink-0">Agent</span>' : ''}
+                </div>
                 <span class="text-[10px] text-slate-400 shrink-0">\${timeStr}</span>
               </div>
               <p class="text-xs text-slate-500 truncate">\${c.last_message || 'Media file'}</p>
@@ -514,8 +526,10 @@ export function renderDashboardHtml(): string {
 
     function selectChatContact(phone, name) {
       activeChatPhone = phone;
-      document.getElementById('chatActiveName').textContent = name || '+' + phone;
-      document.getElementById('chatActivePhone').textContent = '+' + phone;
+      const phoneLabel = phone && phone.length <= 13 ? '+' + phone : '';
+      const titleName = name || phoneLabel || 'WhatsApp Contact';
+      document.getElementById('chatActiveName').textContent = titleName;
+      document.getElementById('chatActivePhone').textContent = phoneLabel || (name ? 'WhatsApp Account' : phone);
       document.getElementById('chatHeaderActions').style.display = 'flex';
       renderChatContacts(allConversations);
       loadMessagesForActiveChat(phone);
@@ -958,12 +972,26 @@ export function renderDashboardHtml(): string {
     }
 
     function filterChatList() {
-      const q = document.getElementById('chatSearchInput').value.toLowerCase();
-      const filtered = allConversations.filter(c => 
-        c.contact_phone.includes(q) ||
-        (c.contact_name && c.contact_name.toLowerCase().includes(q)) ||
-        (c.last_message && c.last_message.toLowerCase().includes(q))
-      );
+      const q = (document.getElementById('chatSearchInput')?.value || '').toLowerCase();
+      const onlyAgents = document.getElementById('onlyAgentsFilter')?.checked || false;
+
+      let filtered = allConversations || [];
+      if (onlyAgents) {
+        filtered = filtered.filter(c => c.is_agent);
+      }
+      if (q) {
+        filtered = filtered.filter(c => 
+          c.contact_phone.includes(q) ||
+          (c.contact_name && c.contact_name.toLowerCase().includes(q)) ||
+          (c.last_message && c.last_message.toLowerCase().includes(q))
+        );
+      }
+
+      const countBadge = document.getElementById('chatCountBadge');
+      if (countBadge) {
+        countBadge.textContent = \`\${filtered.length} of \${allConversations.length}\`;
+      }
+
       renderChatContacts(filtered);
     }
 

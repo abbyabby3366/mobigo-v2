@@ -16,6 +16,7 @@ import { useRedisAuthState } from './redisAuthState.js';
 import { handleInboundEvent } from './inboundActionHandler.js';
 import { SessionStore } from './sessionStore.js';
 import { MessageStore, MessageDirection, MessageStatus } from './messageStore.js';
+import { AgentWorkflowService } from './agentWorkflowService.js';
 
 const SESSIONS_DIR = process.env.SESSIONS_DIR || './sessions';
 
@@ -75,9 +76,15 @@ export function normalizePhone(raw: string): string {
 
 export async function verifyAndFormatJid(
   sock: any,
-  phone: string
+  phoneOrJid: string
 ): Promise<{ jid: string; exists: boolean; cleanPhone: string }> {
-  const clean = normalizePhone(phone);
+  // If already a full JID (e.g. @lid, @s.whatsapp.net, @g.us)
+  if (phoneOrJid && phoneOrJid.includes('@')) {
+    const rawNumber = phoneOrJid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+    return { jid: phoneOrJid, exists: true, cleanPhone: rawNumber };
+  }
+
+  const clean = normalizePhone(phoneOrJid);
   if (!clean) {
     return { jid: '', exists: false, cleanPhone: '' };
   }
@@ -271,11 +278,64 @@ export async function initWhatsAppSession(sessionId: string): Promise<ActiveSess
       const pushName = msg.pushName || '';
       const msgTime = msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000) : new Date();
 
+      // Extract real phone number (handling WhatsApp @lid / Linked Identity Device)
       let senderPhone = '';
+
+      // 1. Direct phone JID (@s.whatsapp.net or @c.us)
       if (fromJid.endsWith('@s.whatsapp.net') || fromJid.endsWith('@c.us')) {
         senderPhone = fromJid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
-      } else {
-        senderPhone = normalizePhone(fromJid.split('@')[0]);
+      }
+
+      // 2. If fromJid is LID or group, check alternative participant properties provided by Baileys
+      if (!senderPhone || fromJid.endsWith('@lid') || fromJid.endsWith('@g.us')) {
+        const candidates = [
+          (msg.key as any)?.remoteJidAlt,
+          (msg.key as any)?.participant,
+          (msg as any)?.participant,
+          (msg.key as any)?.participantPn,
+          (msg as any)?.sender,
+          (msg.key as any)?.senderPn,
+        ];
+        for (const cand of candidates) {
+          if (typeof cand === 'string' && (cand.includes('@s.whatsapp.net') || cand.includes('@c.us'))) {
+            const p = cand.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+            if (p.length >= 8 && p.length <= 15) {
+              senderPhone = p;
+              break;
+            }
+          }
+        }
+      }
+
+      // 3. Try resolving via Baileys signalRepository LID-to-PN mapping
+      if (!senderPhone || fromJid.endsWith('@lid')) {
+        try {
+          const lidClean = fromJid.includes('@') ? fromJid : `${fromJid}@lid`;
+          const pn = await (sock as any).signalRepository?.lidMapping?.getPNForLID?.(lidClean);
+          if (typeof pn === 'string' && (pn.includes('@s.whatsapp.net') || pn.includes('@c.us'))) {
+            const p = pn.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+            if (p.length >= 8 && p.length <= 15) {
+              senderPhone = p;
+            }
+          }
+
+          if (!senderPhone) {
+            const pns = await (sock as any).signalRepository?.lidMapping?.getPNsForLIDs?.([lidClean]);
+            const firstPn = pns?.[0]?.pn;
+            if (typeof firstPn === 'string' && (firstPn.includes('@s.whatsapp.net') || firstPn.includes('@c.us'))) {
+              const p = firstPn.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+              if (p.length >= 8 && p.length <= 15) {
+                senderPhone = p;
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('[Baileys] Error resolving LID to PN:', err);
+        }
+      }
+
+      if (!senderPhone) {
+        senderPhone = fromJid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
       }
 
       await SessionStore.updateSession(sessionId, {
@@ -378,6 +438,31 @@ export async function initWhatsAppSession(sessionId: string): Promise<ActiveSess
         }
       }
 
+      // 1. Process with Agent Workflow (/start, /stop, /ai, /reset, field edits, proceed)
+      let isHandledByWorkflow = false;
+      try {
+        isHandledByWorkflow = await AgentWorkflowService.handleInboundMessage(
+          sessionId,
+          fromJid,
+          senderPhone,
+          pushName,
+          textContent,
+          hasMedia,
+          mediaType,
+          fileName,
+          fileBuffer,
+          mimetype,
+          fileUrl
+        );
+      } catch (wfErr) {
+        console.error('[Baileys] Error in Agent Workflow:', wfErr);
+      }
+
+      // If active agent chat or command handled, skip standard customer auto-reply
+      if (isHandledByWorkflow || AgentWorkflowService.isAgentChat(fromJid)) {
+        continue;
+      }
+
       const eventPayload: InboundMessageEvent = {
         sessionId,
         messageId: msg.key.id || '',
@@ -391,6 +476,7 @@ export async function initWhatsAppSession(sessionId: string): Promise<ActiveSess
         mimetype,
         fileBuffer,
         timestamp: msgTime,
+        replySender: (to, t) => sendTextMessage(sessionId, to, t),
       };
 
       handleInboundEvent(eventPayload).catch((err) => {
