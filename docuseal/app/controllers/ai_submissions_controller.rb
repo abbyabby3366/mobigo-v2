@@ -141,20 +141,28 @@ class AiSubmissionsController < ApplicationController
                         Array.wrap(submitters_raw)
                       end
 
-    normalized_submitters = submitters_list.map do |s|
+    normalized_submitters = submitters_list.each_with_index.map do |s, idx|
       s_hash = s.is_a?(ActionController::Parameters) ? s.permit!.to_h : s.to_h
       values = s_hash[:values] || s_hash['values'] || {}
-      s_uuid = s_hash[:uuid] || s_hash['uuid']
+
+      t_sub = template.submitters.find { |ts| ts['uuid'] == (s_hash[:uuid] || s_hash['uuid']) } ||
+              template.submitters[idx] ||
+              template.submitters.first ||
+              {}
+      s_uuid = t_sub['uuid'] || s_hash[:uuid] || s_hash['uuid']
+      s_role = s_hash[:role] || s_hash['role'] || t_sub['name'] || 'First Party'
 
       {
         uuid: s_uuid,
         name: s_hash[:name] || s_hash['name'],
         email: s_hash[:email] || s_hash['email'],
         phone: s_hash[:phone] || s_hash['phone'],
+        role: s_role,
         'uuid' => s_uuid,
         'name' => s_hash[:name] || s_hash['name'],
         'email' => s_hash[:email] || s_hash['email'],
         'phone' => s_hash[:phone] || s_hash['phone'],
+        'role' => s_role,
         values: values,
         'values' => values
       }
