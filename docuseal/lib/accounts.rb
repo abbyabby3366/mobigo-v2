@@ -190,7 +190,7 @@ module Accounts
 
     ::ActiveSupport::TimeZone.all.find { |e| e.tzinfo == tzinfo }&.name || timezone
   rescue TZInfo::InvalidTimezoneIdentifier
-    'UTC'
+    'Singapore'
   end
 
   def link_expires_at(account)

@@ -148,7 +148,7 @@
                 <% @recent_transactions.each do |tx| %>
                   <tr>
                     <td class="font-mono text-xs opacity-70 whitespace-nowrap">
-                      <%= tx.completed_at ? tx.completed_at.strftime('%b %d, %Y %H:%M') : tx.created_at.strftime('%b %d, %Y %H:%M') %>
+                      <%= (tx.completed_at || tx.created_at)&.in_time_zone(current_account&.timezone || 'Singapore')&.strftime('%b %d, %Y %H:%M') %>
                     </td>
                     <td>
                       <div class="font-medium text-base-content">

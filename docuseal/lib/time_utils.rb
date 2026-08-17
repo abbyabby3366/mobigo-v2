@@ -68,18 +68,19 @@ module TimeUtils
   module_function
 
   def timezone_abbr(timezone, time = Time.current)
-    tz_info = TZInfo::Timezone.get(
-      ActiveSupport::TimeZone::MAPPING[timezone] || timezone || 'UTC'
-    )
+    tz_name = ActiveSupport::TimeZone::MAPPING[timezone] || timezone.presence || Time.zone&.name || 'Singapore'
+    tz_info = TZInfo::Timezone.get(tz_name)
 
     tz_info.abbreviation(time)
+  rescue TZInfo::InvalidTimezoneIdentifier
+    'GMT+8'
   end
 
   def parse_time_value(value)
     if value.is_a?(Integer)
-      Time.zone.at(value.to_s.first(10).to_i)
+      (Time.zone || ActiveSupport::TimeZone['Singapore']).at(value.to_s.first(10).to_i)
     elsif value.present?
-      Time.zone.parse(value)
+      (Time.zone || ActiveSupport::TimeZone['Singapore']).parse(value)
     end
   end
 
@@ -97,14 +98,14 @@ module TimeUtils
 
     preview_pattern = format.gsub(TOKEN_REGEX) { |token| TIME_FORMATS.key?(token) ? '--' : ALL_FORMATS[token] }
 
-    I18n.l(Time.current.in_time_zone(timezone.presence || Time.zone.name), format: preview_pattern, locale:)
+    I18n.l(Time.current.in_time_zone(timezone.presence || Time.zone&.name || 'Singapore'), format: preview_pattern, locale:)
   end
 
   def current_date_value(format, timezone)
-    tz = timezone.presence || Time.zone.name
+    tz = timezone.presence || Time.zone&.name || 'Singapore'
 
     if format_with_time?(format)
-      Time.current.utc.iso8601
+      Time.current.in_time_zone(tz).iso8601
     elsif month_only_format?(format)
       Time.current.in_time_zone(tz).strftime('%Y-%m')
     else
@@ -117,7 +118,7 @@ module TimeUtils
     pattern = pattern.upcase unless with_time
     pattern = pattern.gsub(TOKEN_REGEX, ALL_FORMATS)
 
-    with_time ? Time.zone.strptime(string, pattern) : Date.strptime(string, pattern)
+    with_time ? (Time.zone || ActiveSupport::TimeZone['Singapore']).strptime(string, pattern) : Date.strptime(string, pattern)
   end
 
   def format_date_string(string, format, locale, timezone: nil)
@@ -126,7 +127,7 @@ module TimeUtils
 
     date =
       if format_with_time?(format)
-        Time.iso8601(string.to_s).in_time_zone(timezone.presence || Time.zone.name)
+        Time.iso8601(string.to_s).in_time_zone(timezone.presence || Time.zone&.name || 'Singapore')
       elsif string.to_s.match?(MONTH_ONLY_VALUE_REGEX)
         year, month = string.to_s.split('-').map(&:to_i)
 

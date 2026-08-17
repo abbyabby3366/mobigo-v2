@@ -19,6 +19,8 @@ module DocuSeal
   class Application < Rails::Application
     config.load_defaults 8.1
 
+    config.time_zone = 'Singapore'
+
     config.autoload_lib(ignore: %w[assets tasks puma])
 
     config.active_storage.routes_prefix = ''

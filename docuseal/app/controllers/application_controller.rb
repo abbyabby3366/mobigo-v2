@@ -9,6 +9,7 @@ class ApplicationController < ActionController::Base
   check_authorization unless: :devise_controller?
 
   around_action :with_locale
+  around_action :with_time_zone
   before_action :sign_in_for_demo, if: -> { Docuseal.demo? }
   before_action :maybe_redirect_to_setup, unless: :signed_in?
   before_action :authenticate_user!, unless: :devise_controller?
@@ -71,6 +72,10 @@ class ApplicationController < ActionController::Base
     locale ||= current_account.locale
 
     I18n.with_locale(locale, &)
+  end
+
+  def with_time_zone(&)
+    Time.use_zone(current_account&.timezone.presence || Rails.application.config.time_zone || 'Singapore', &)
   end
 
   def with_browser_locale(&)

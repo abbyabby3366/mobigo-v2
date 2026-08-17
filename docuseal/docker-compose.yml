@@ -20,6 +20,7 @@ services:
       - path: .env
         required: false
     environment:
+      - TZ=Asia/Singapore
       - FORCE_SSL=${HOST}
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/docuseal
 
@@ -28,9 +29,10 @@ services:
     volumes:
       - pg_data:/var/lib/postgresql/18/docker
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: docuseal
+      - TZ=Asia/Singapore
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=docuseal
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s

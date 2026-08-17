@@ -31,7 +31,7 @@ class BillingSettingsController < ApplicationController
                           else
                             "api-billing-activity-#{Time.current.strftime('%Y%m%d%H%M%S')}.csv"
                           end
-        send_data Billing.generate_csv(@transactions),
+        send_data Billing.generate_csv(@transactions, current_account&.timezone || 'Singapore'),
                   filename: filename_prefix,
                   type: 'text/csv'
       end

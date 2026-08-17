@@ -53,17 +53,22 @@ class Account < ApplicationRecord
   has_many :active_users, -> { active }, dependent: :destroy,
                                          inverse_of: :account, class_name: 'User'
 
-  attribute :timezone, :string, default: 'UTC'
+  attribute :timezone, :string, default: 'Singapore'
   attribute :locale, :string, default: 'en-US'
 
   scope :active, -> { where(archived_at: nil) }
+
+  def timezone
+    tz = read_attribute(:timezone)
+    (tz.blank? || tz == 'UTC') ? 'Singapore' : tz
+  end
 
   def testing?
     linked_account_account&.testing?
   end
 
   def tz_info
-    @tz_info ||= TZInfo::Timezone.get(ActiveSupport::TimeZone::MAPPING[timezone] || timezone)
+    @tz_info ||= TZInfo::Timezone.get(ActiveSupport::TimeZone::MAPPING[timezone] || timezone || 'Asia/Singapore')
   end
 
   def default_template_folder
