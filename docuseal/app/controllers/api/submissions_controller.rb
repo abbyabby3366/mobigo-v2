@@ -13,6 +13,7 @@ module Api
       authorize!(:create, Submission)
     end
 
+    before_action :ensure_sufficient_balance, only: :create
     before_action :maybe_return_template_error, only: :create
 
     def index
@@ -279,6 +280,16 @@ module Api
           { key => [permitted_attrs] }, { key => permitted_attrs }
         ).fetch(key, [])
       end
+    end
+
+    def ensure_sufficient_balance
+      return if Billing.sufficient_balance?(current_account)
+
+      render json: {
+        error: "Insufficient API credit balance ($#{sprintf('%.2f', Billing.balance(current_account))} USD). Please top up your balance at /settings/billing to create new document submissions.",
+        balance: Billing.balance(current_account),
+        required: Billing::PRICE_PER_SIGNATURE
+      }, status: :payment_required
     end
   end
 end

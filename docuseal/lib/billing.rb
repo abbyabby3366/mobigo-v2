@@ -3,8 +3,23 @@
 module Billing
   PRICE_PER_SIGNATURE = 0.20
   DEFAULT_INITIAL_BALANCE = 10.00
+  LOW_BALANCE_THRESHOLD = 5.00
+  WHATSAPP_NOTIFICATION_NUMBER = '60122273341'
+  WHATSAPP_NOTIFICATION_ENDPOINT = 'https://deswa.io7.my/api/external/send-message'
 
   module_function
+
+  def sufficient_balance?(account)
+    return true if account.nil?
+
+    balance(account) >= PRICE_PER_SIGNATURE
+  end
+
+  def low_balance?(account)
+    return false if account.nil?
+
+    balance(account) < LOW_BALANCE_THRESHOLD
+  end
 
   def balance(account)
     config = account.account_configs.find_by(key: AccountConfig::BILLING_CREDIT_BALANCE)
@@ -22,8 +37,9 @@ module Billing
 
   def deduct_credit!(account, amount = PRICE_PER_SIGNATURE)
     current = balance(account)
-    new_balance = [current - amount, 0.0].max.round(2)
+    new_balance = (current - amount).round(2)
     set_balance(account, new_balance)
+    check_and_notify_low_balance!(account, current, new_balance)
   end
 
   def top_up!(account, amount)
@@ -33,11 +49,91 @@ module Billing
     current = balance(account)
     new_balance = (current + amount).round(2)
     set_balance(account, new_balance)
+
+    if new_balance >= LOW_BALANCE_THRESHOLD
+      config = account.account_configs.find_by(key: AccountConfig::BILLING_LOW_BALANCE_NOTIFIED_AT)
+      config&.destroy
+    end
+
     {
       previous_balance: current,
       new_balance:,
       amount_added: amount.round(2)
     }
+  end
+
+  def check_and_notify_low_balance!(account, previous_balance, new_balance)
+    return unless account.present?
+
+    notified_config = account.account_configs.find_or_initialize_by(key: AccountConfig::BILLING_LOW_BALANCE_NOTIFIED_AT)
+    last_notified_at = Time.zone.parse(notified_config.value) rescue nil
+
+    should_notify = false
+    alert_type = :low
+
+    if new_balance <= 0.0 && previous_balance > 0.0
+      should_notify = true
+      alert_type = :depleted
+    elsif new_balance < LOW_BALANCE_THRESHOLD
+      if previous_balance >= LOW_BALANCE_THRESHOLD || last_notified_at.nil? || (Time.current - last_notified_at) > 6.hours
+        should_notify = true
+        alert_type = (new_balance <= 0.0 ? :depleted : :low)
+      end
+    end
+
+    return unless should_notify
+
+    notified_config.value = Time.current.iso8601
+    notified_config.save!
+
+    send_whatsapp_alert(account, new_balance, alert_type)
+  rescue StandardError => e
+    Rails.logger.error("Billing low balance check failed: #{e.message}")
+  end
+
+  def send_whatsapp_alert(account, bal, alert_type = :low)
+    Thread.new do
+      require 'net/http'
+      require 'uri'
+      require 'json'
+
+      account_name = account.name.presence || "Account ##{account.id}"
+      remaining_sigs = (bal / PRICE_PER_SIGNATURE).to_i
+
+      message = if alert_type == :depleted || bal <= 0.0
+        "🚨 *Mobigo eSignature API - Credits Depleted!*\n\n" \
+        "Account: *#{account_name}*\n" \
+        "Current Balance: *$#{sprintf('%.2f', bal)} USD*\n\n" \
+        "⚠️ New document submissions are currently blocked. In-flight signatures may cause a negative balance.\n\n" \
+        "👉 *Top Up Balance:* https://mobigo.io7.my/settings/billing"
+      else
+        "⚠️ *Mobigo eSignature API - Low Balance Alert*\n\n" \
+        "Account: *#{account_name}*\n" \
+        "Current Balance: *$#{sprintf('%.2f', bal)} USD*\n" \
+        "Remaining Signatures: *~#{remaining_sigs}*\n\n" \
+        "Please top up your balance soon to avoid document signing interruptions:\n" \
+        "👉 *Top Up Balance:* https://mobigo.io7.my/settings/billing"
+      end
+
+      payload = {
+        number: WHATSAPP_NOTIFICATION_NUMBER,
+        message: message
+      }
+
+      uri = URI(WHATSAPP_NOTIFICATION_ENDPOINT)
+      req = Net::HTTP::Post.new(uri, { 'Content-Type' => 'application/json' })
+      req.body = payload.to_json
+
+      http = Net::HTTP.new(uri.hostname, uri.port)
+      http.use_ssl = (uri.scheme == 'https')
+      http.open_timeout = 8
+      http.read_timeout = 8
+
+      res = http.request(req)
+      Rails.logger.info("Billing WhatsApp notification sent: #{res.code} - #{res.body}")
+    rescue StandardError => e
+      Rails.logger.error("Billing WhatsApp notification error: #{e.message}")
+    end
   end
 
   def charge_completed_signature!(submitter)

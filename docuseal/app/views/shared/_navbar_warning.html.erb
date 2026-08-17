@@ -1,0 +1,24 @@
+<% if signed_in? && current_account.present? %>
+  <% current_bal = Billing.balance(current_account) %>
+  <% if current_bal < Billing::PRICE_PER_SIGNATURE %>
+    <div class="bg-error text-error-content px-4 py-2.5 shadow-md">
+      <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs sm:text-sm">
+        <div class="flex items-center gap-2 font-medium">
+          <%= svg_icon('alert_circle', class: 'w-5 h-5 shrink-0') rescue '' %>
+          <span><strong>API Credits Depleted ($<%= sprintf('%.2f', current_bal) %> USD)</strong> — Insufficient balance to send new document submissions.</span>
+        </div>
+        <%= link_to 'Top Up Balance', settings_billing_index_path, class: 'btn btn-xs btn-neutral text-white font-semibold whitespace-nowrap shadow-sm hover:scale-105 transition-transform' %>
+      </div>
+    </div>
+  <% elsif current_bal < Billing::LOW_BALANCE_THRESHOLD %>
+    <div class="bg-warning text-warning-content px-4 py-2 shadow-sm">
+      <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs sm:text-sm">
+        <div class="flex items-center gap-2 font-medium">
+          <%= svg_icon('alert_triangle', class: 'w-4 h-4 shrink-0') rescue '' %>
+          <span><strong>Low API Credit Balance ($<%= sprintf('%.2f', current_bal) %> USD)</strong> — Credits running low (<%= (current_bal / Billing::PRICE_PER_SIGNATURE).to_i %> signatures left).</span>
+        </div>
+        <%= link_to 'Top Up Balance', settings_billing_index_path, class: 'btn btn-xs btn-neutral text-white font-semibold whitespace-nowrap shadow-sm' %>
+      </div>
+    </div>
+  <% end %>
+<% end %>

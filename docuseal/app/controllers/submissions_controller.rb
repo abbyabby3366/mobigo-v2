@@ -10,6 +10,8 @@ class SubmissionsController < ApplicationController
     authorize!(:create, Submission)
   end
 
+  before_action :ensure_sufficient_balance, only: %i[new create]
+
   FIELD_ICONS = {
     'text' => 'text_size', 'signature' => 'writing_sign', 'date' => 'calendar_event',
     'number' => 'square_number_1', 'image' => 'photo', 'initials' => 'letter_case_upper',
@@ -133,5 +135,11 @@ class SubmissionsController < ApplicationController
     params.delete(:body)
 
     params
+  end
+
+  def ensure_sufficient_balance
+    return if Billing.sufficient_balance?(current_account)
+
+    redirect_to settings_billing_index_path, alert: "Insufficient API credit balance ($#{sprintf('%.2f', Billing.balance(current_account))} USD). Please top up your balance to send new document submissions."
   end
 end

@@ -64,6 +64,7 @@ class AccountConfig < ApplicationRecord
   POLICY_LINKS_KEY = 'policy_links'
   ENABLE_MCP_KEY = 'enable_mcp'
   BILLING_CREDIT_BALANCE = 'billing_credit_balance'
+  BILLING_LOW_BALANCE_NOTIFIED_AT = 'billing_low_balance_notified_at'
   AI_ROUTER_KEY = 'ai_router_key'
   AI_ROUTER_URL = 'ai_router_url'
   AI_ROUTER_MODEL = 'ai_router_model'

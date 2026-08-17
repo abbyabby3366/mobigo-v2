@@ -6,6 +6,7 @@ class AiSubmissionsController < ApplicationController
   before_action :authenticate_user!
   before_action -> { authorize!(:create, Submission) }
   before_action :load_template, only: %i[template_fields extract create]
+  before_action :ensure_sufficient_balance, only: :create
 
   def new
     @templates = (current_account ? current_account.templates : Template).active.order(name: :asc)
@@ -182,5 +183,11 @@ class AiSubmissionsController < ApplicationController
       new_fields: new_fields,
       params: params.to_unsafe_h.merge('send_completed_email' => true)
     )
+  end
+
+  def ensure_sufficient_balance
+    return if Billing.sufficient_balance?(current_account)
+
+    redirect_to settings_billing_index_path, alert: "Insufficient API credit balance ($#{sprintf('%.2f', Billing.balance(current_account))} USD). Please top up your balance to send new document submissions."
   end
 end
