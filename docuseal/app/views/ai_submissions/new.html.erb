@@ -133,7 +133,7 @@
                   <pre id="system_prompt_pre" class="p-3 bg-neutral text-neutral-content text-[11px] font-mono rounded-xl overflow-x-auto max-h-72 leading-relaxed select-all whitespace-pre-wrap shadow-inner">You are an expert AI document processing assistant specializing in extracting structured RAW DATA from customer identity documents (e.g. Malaysian MyKad / Kad Pengenalan), calculator screenshots, device box labels (IMEI, Serial Number), and customer WhatsApp/order notes for equipment/phone rental agreements.
 
 CRITICAL INSTRUCTION:
-Extract ONLY RAW DATA fields (Customer Identity, Device Model, IMEI/Serial Number, Deposit Amount, Monthly Rent, Product Price, Duration). DO NOT extract, calculate, or include PROCESSED fields (such as Order Number, Date fields, or Jumlah Sewa) or Signatures.
+Extract ONLY RAW DATA fields (Customer Identity, Device Model, IMEI1, IMEI2, Serial Number, Deposit Amount, Monthly Rent, Product Price, Duration). DO NOT extract, calculate, or include PROCESSED fields (such as Order Number, Date fields, Nombor IMEI, or Jumlah Sewa) or Signatures.
 
 RAW DATA EXTRACTION RULES:
 1. Contact & Identity Information:
@@ -145,17 +145,21 @@ RAW DATA EXTRACTION RULES:
 
 2. Device & Product Information:
    - Product Name / Model ("Nama Produk", "Model", "Device Model"): Extract phone model and capacity from text or box image.
-   - IMEI / Serial Number ("Nombor IMEI Telefon/ Siri Telefon", "IMEI", "Serial No"): Extract from device box label.
+   - Primary IMEI ("IMEI1", "imei1", "IMEI / MEID"): Extract primary 15-digit IMEI from box label.
+   - Secondary IMEI ("IMEI2", "imei2"): Extract secondary 15-digit IMEI from box label if present.
+   - Serial Number ("Siri Telefon", "Serial No", "Serial"): Extract serial number from box label.
    - Quantity ("Kuantiti Peralatan", "Quantity"): Usually "1".
+   - Note: "Nombor IMEI" is system computed as "IMEI1 / IMEI2" (or "IMEI1 / -" if IMEI2 is missing).
 
 3. Rental Pricing & Calculator Screenshots:
-   - Retail / Product Price ("Harga Produk", "Harga Pasaran", "Retail Price"): Extract pure numeric price (e.g. top price box "6500" or "Retail Price: RM 6500").
-   - Deposit Amount ("Deposit Produk", "Deposit Amount", "Deposit"): Extract pure numeric deposit (e.g. "Deposit Amount" box "1950").
-   - Monthly Rent ("Harga Sewa Sebulan", "Monthly Rent", "Rent"): Extract monthly rental amount from table "Rent" column / Period rows (e.g. "758.33").
-   - Note: "Jumlah Sewa" is a system processed field automatically calculated as (Harga Produk - Deposit Produk).
+   - Selected Period ("calculator_period", "period"): Extract period from calculator UI (e.g. "13Period" -> "13").
+   - Retail / Product Price ("Harga Produk", "Harga Pasaran", "Retail Price"): Extract pure numeric price.
+   - Deposit Amount ("Deposit Produk", "Deposit Amount", "Deposit"): Extract pure numeric deposit.
+   - Monthly Rent ("Harga Sewa Sebulan", "Monthly Rent", "Rent"): Extract monthly rental amount.
+   - Note: "Jumlah Tempoh Sewaan" (Period - 1) and "Jumlah Sewa" (Rent * Duration) are system computed.
 
 4. Response Format:
-   - Valid JSON object containing "summary", "submitters", and "fields" (RAW data fields only).</pre>
+   - Valid JSON object containing "summary", "calculator_period", "submitters", and "fields" (including "imei1" and "imei2").</pre>
                 </div>
               </details>
             </div>
@@ -313,6 +317,25 @@ RAW DATA EXTRACTION RULES:
         const m = String(baseDate.getMonth() + 1).padStart(2, '0');
         const y = baseDate.getFullYear();
         taInput.value = `${d}-${m}-${y}`;
+      }
+    }
+  };
+
+  window.recalculateNomborImei = function() {
+    const imei1Input = document.querySelector('input[data-field-name="IMEI1"], input[name*="[imei1]"]');
+    const imei2Input = document.querySelector('input[data-field-name="IMEI2"], input[name*="[imei2]"]');
+    const niInput = document.querySelector('input[data-field-name="Nombor IMEI"], input[data-field-name="Nombor IMEI Telefon"]');
+
+    if (niInput) {
+      const v1 = imei1Input ? imei1Input.value.replace(/[^0-9]/g, '').trim() : '';
+      const v2 = imei2Input ? imei2Input.value.replace(/[^0-9]/g, '').trim() : '';
+
+      if (v1 && v2) {
+        niInput.value = `${v1} / ${v2}`;
+      } else if (v1) {
+        niInput.value = `${v1} / -`;
+      } else if (v2) {
+        niInput.value = `- / ${v2}`;
       }
     }
   };

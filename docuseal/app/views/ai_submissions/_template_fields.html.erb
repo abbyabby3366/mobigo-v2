@@ -109,6 +109,8 @@
                   <div class="flex items-center space-x-1.5 flex-shrink-0 ml-2">
                     <% if auto_preview.present? %>
                       <span class="badge badge-xs font-mono text-[9px] text-neutral-800 bg-neutral-200 border-neutral-300">Auto: <%= auto_preview %></span>
+                    <% elsif f['name'].to_s.downcase.include?('imei') %>
+                      <span class="badge badge-xs font-mono text-[9px] text-neutral-800 bg-neutral-200 border-neutral-300">Auto: IMEI1 / IMEI2</span>
                     <% end %>
                     <span class="badge badge-xs text-[10px] uppercase font-mono" style="background-color: #f4f4f5 !important; color: #18181b !important; border: 1px solid #e4e4e7 !important;"><%= f['type'] || 'text' %></span>
                     <% if sub %>

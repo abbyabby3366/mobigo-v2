@@ -95,8 +95,11 @@ module AiSubmissionExtractor
 
       2. Device & Product Information:
          - Product Name / Model ("Nama Produk", "Model", "Device Model"): Extract phone model and capacity from text or box image (e.g. "iPhone 17 Pro Max 256GB" or "iPhone 17 Pro Max, 512GB").
-         - IMEI / Serial Number ("Nombor IMEI Telefon/ Siri Telefon", "IMEI", "Serial No"): Extract from device box label (e.g. IMEI: 354704736663104 / Serial: LG93CV43WP).
+         - Primary IMEI / IMEI 1 ("IMEI1", "imei1", "IMEI", "IMEI / MEID"): Extract primary 15-digit IMEI from device box label (e.g. "354704736663104" or "358701814261211").
+         - Secondary IMEI / IMEI 2 ("IMEI2", "imei2"): Extract secondary 15-digit IMEI from device box label if present (e.g. "354704736416883" or "358701818872716"). If device only has 1 IMEI, leave empty.
+         - Serial Number ("Siri Telefon", "Serial No", "Serial"): Extract serial number from box label (e.g. "LG93CV43WP").
          - Quantity ("Kuantiti Peralatan", "Quantity"): Usually "1".
+         - Note: DO NOT combine IMEIs into "Nombor IMEI"; extract "imei1" and "imei2" separately as RAW fields.
 
       3. Rental Pricing & Calculator Screenshots (e.g. dark blue calculator UI with Period table):
          - Selected Period ("calculator_period", "period", "tempoh"): ALWAYS extract the selected period from the calculator UI (e.g. from the Period dropdown box "13Period", "* Period", or table text "Period: 13Period" -> "13Period" or "13"). Put this in the root "calculator_period" and fields["period"].
@@ -134,6 +137,8 @@ module AiSubmissionExtractor
         ],
         "fields": {
           "period": "<extracted raw period, e.g. '13Period' or '13'>",
+          "imei1": "<extracted 15-digit IMEI 1>",
+          "imei2": "<extracted 15-digit IMEI 2 or empty>",
           "<raw_field_name>": "<extracted raw value>"
         }
       }
@@ -347,8 +352,12 @@ module AiSubmissionExtractor
     # Device & Hardware
     'Nama Produk' => 'Product Name / Model',
     'Model Telefon' => 'Phone Model',
-    'Nombor IMEI' => 'IMEI Number',
-    'Nombor IMEI Telefon' => 'IMEI Number',
+    'IMEI1' => 'IMEI 1 (Primary)',
+    'IMEI2' => 'IMEI 2 (Secondary)',
+    'imei1' => 'IMEI 1 (Primary)',
+    'imei2' => 'IMEI 2 (Secondary)',
+    'Nombor IMEI' => 'IMEI Number (IMEI1 / IMEI2)',
+    'Nombor IMEI Telefon' => 'IMEI Number (IMEI1 / IMEI2)',
     'No IMEI' => 'IMEI Number',
     'IMEI' => 'IMEI Number',
     'Siri Telefon' => 'Serial Number',
@@ -406,8 +415,12 @@ module AiSubmissionExtractor
     'Alamat Penghantaran ("Pihak B")' => 'delivery_address',
     'E-mel ("Pihak B")' => 'recipient_email',
     'Nama Produk' => 'product_name',
-    'Nombor IMEI' => 'imei_number',
-    'Nombor IMEI Telefon' => 'imei_number',
+    'IMEI1' => 'imei1',
+    'IMEI2' => 'imei2',
+    'imei1' => 'imei1',
+    'imei2' => 'imei2',
+    'Nombor IMEI' => 'nombor_imei',
+    'Nombor IMEI Telefon' => 'nombor_imei',
     'Siri Telefon' => 'serial_number',
     'Nombor IMEI Telefon/ Siri Telefon' => 'imei_and_serial',
     'Kuantiti Peralatan' => 'quantity',
@@ -473,6 +486,10 @@ module AiSubmissionExtractor
       'Product Name / Model'
     when /imei.*siri|siri.*imei/i
       'IMEI / Serial Number'
+    when /imei\s*1\b/i
+      'IMEI 1 (Primary)'
+    when /imei\s*2\b/i
+      'IMEI 2 (Secondary)'
     when /imei/i
       'IMEI Number'
     when /siri|serial/i
@@ -550,11 +567,41 @@ module AiSubmissionExtractor
     # Jumlah Sewa (Total Rent) = Harga Sewa Sebulan * Jumlah Tempoh Sewaan
     return true if normalized =~ /\b(jumlah\s+sewa|jumlah\s+sewaan|total\s+rent)\b/i
 
+    # Nombor IMEI = "IMEI1 / IMEI2" or "IMEI1 / -" (PROCESSED DATA)
+    return true if normalized =~ /\b(nombor\s+imei|no\s+imei|imei\s+number|imei)\b/i && normalized !~ /\b(imei\s*1|imei\s*2|imei1|imei2)\b/i
+
     # Date-related: explicit agreement date, tarikh, haribulan, or standalone day/month/year/hari/bulan/tahun
     return true if normalized =~ /\b(date|tarikh|haribulan)\b/i
     return true if normalized =~ /\b(day|month|year|hari|bulan|tahun)\b/i
 
     false
+  end
+
+  def calculate_nombor_imei(fields_hash = {})
+    return nil if fields_hash.blank?
+
+    imei1 = fields_hash['imei1'] || fields_hash['IMEI1'] || fields_hash['imei_1'] || fields_hash['primary_imei'] || fields_hash['imei']
+    imei2 = fields_hash['imei2'] || fields_hash['IMEI2'] || fields_hash['imei_2'] || fields_hash['secondary_imei']
+
+    # If imei1 is already in combined format (e.g. "358701814261211 / 358701818872716" or contains "/")
+    if imei1.to_s.include?('/')
+      return imei1.to_s.strip
+    end
+
+    imei1_str = imei1.to_s.gsub(/[^0-9]/, '').strip
+    imei2_str = imei2.to_s.gsub(/[^0-9]/, '').strip
+
+    if imei1_str.present? && imei2_str.present?
+      "#{imei1_str} / #{imei2_str}"
+    elsif imei1_str.present?
+      "#{imei1_str} / -"
+    elsif imei2_str.present?
+      "- / #{imei2_str}"
+    elsif imei1.present?
+      "#{imei1.to_s.strip} / -"
+    else
+      nil
+    end
   end
 
   def calculate_jumlah_tempoh_sewaan(fields_hash = {})
@@ -644,7 +691,10 @@ module AiSubmissionExtractor
     # 8. Jumlah Sewa = Harga Sewa Sebulan * Jumlah Tempoh Sewaan
     elsif normalized =~ /\b(jumlah\s+sewa|jumlah\s+sewaan|total\s+rent)\b/i
       calculate_jumlah_sewa(fields_hash || {})
-    # 9. Agreement Date (e.g. 15-08-2026)
+    # 9. Nombor IMEI = "IMEI1 / IMEI2" or "IMEI1 / -"
+    elsif normalized =~ /\b(nombor\s+imei|no\s+imei|imei\s+number|imei)\b/i && normalized !~ /\b(imei\s*1|imei\s*2|imei1|imei2)\b/i
+      calculate_nombor_imei(fields_hash || {})
+    # 10. Agreement Date (e.g. 15-08-2026)
     elsif normalized =~ /\b(date|tarikh)\b/i || field_type.to_s == 'date'
       now.strftime('%d-%m-%Y')
     else
@@ -665,12 +715,12 @@ module AiSubmissionExtractor
     # Jumlah Tempoh Sewaan must be computed FIRST because Tarikh akhir sewaan and Jumlah Sewa depend on it.
     processed = template_fields.select { |f| processed_data_field?(f['name'], f['type']) }
 
-    # Sort: Jumlah Tempoh Sewaan first, then rental dates/sewa, then everything else
+    # Sort: Jumlah Tempoh Sewaan first, then rental dates/sewa/imei, then everything else
     sorted_processed = processed.sort_by do |f|
       normalized = f['name'].to_s.downcase
       if normalized =~ /tempoh/
         0  # Jumlah Tempoh Sewaan first
-      elsif normalized =~ /(mula|akhir|jumlah\s+sewa)/
+      elsif normalized =~ /(mula|akhir|jumlah\s+sewa|imei)/
         1  # Dependent fields second
       else
         2  # Everything else (dates, order number)
@@ -787,6 +837,30 @@ module AiSubmissionExtractor
       en_k = english_key_for(k)
       english_fields[en_k] ||= v
       fields_hash[k] ||= v
+    end
+
+    # Explicitly capture imei1 and imei2 from root fields or scan
+    raw_imei1 = raw_fields['imei1'] || raw_fields['IMEI1'] || raw_fields['imei_1'] || raw_fields['primary_imei']
+    raw_imei2 = raw_fields['imei2'] || raw_fields['IMEI2'] || raw_fields['imei_2'] || raw_fields['secondary_imei']
+
+    # If raw single imei provided containing two IMEIs (e.g. separated by slash or newline), parse them out
+    if raw_imei1.blank? && (raw_fields['imei'].present? || raw_fields['imei_number'].present? || raw_fields['nombor_imei'].present?)
+      combined_imei = raw_fields['imei'] || raw_fields['imei_number'] || raw_fields['nombor_imei']
+      if combined_imei.to_s =~ /(\d{14,16})[^\d]+(\d{14,16})/
+        raw_imei1 = Regexp.last_match(1)
+        raw_imei2 = Regexp.last_match(2)
+      else
+        raw_imei1 = combined_imei.to_s.gsub(/[^0-9]/, '').strip
+      end
+    end
+
+    if raw_imei1.present?
+      fields_hash['imei1'] = raw_imei1
+      english_fields['imei1'] = raw_imei1
+    end
+    if raw_imei2.present?
+      fields_hash['imei2'] = raw_imei2
+      english_fields['imei2'] = raw_imei2
     end
 
     # Explicitly capture calculator_period from root response or regex scan
