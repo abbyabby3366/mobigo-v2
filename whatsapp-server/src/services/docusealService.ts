@@ -117,15 +117,20 @@ export class DocuSealService {
   }
 
   /**
-   * List existing templates
+   * List existing unarchived templates
    */
   async listTemplates(): Promise<any[]> {
-    const url = `${this.getApiUrl()}/api/templates`;
+    const url = `${this.getApiUrl()}/api/templates?archived=false&limit=100`;
     try {
       const response = await axios.get(url, {
         headers: this.getHeaders(),
       });
-      return response.data?.data || response.data || [];
+      const items = response.data?.data || response.data || [];
+      if (!Array.isArray(items)) {
+        return [];
+      }
+      // Strictly filter out any archived templates
+      return items.filter((t: any) => !t.archived_at && !t.archived);
     } catch (err: any) {
       console.error('[DocuSeal] List Templates Error:', err.response?.data || err.message);
       return [];

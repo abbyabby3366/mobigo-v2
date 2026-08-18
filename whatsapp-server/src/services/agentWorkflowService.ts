@@ -20,7 +20,8 @@ export interface ChatSessionWorkflow {
   state: AgentChatState;
   textNotes: string[];
   bufferedFiles: BufferedFile[];
-  selectedTemplateId: number;
+  selectedTemplateId?: number;
+  selectedTemplateName?: string;
   extractedData?: ExtractedDocumentData;
   missingFieldPrompt?: string;
   updatedAt: string;
@@ -34,31 +35,62 @@ export interface TemplateOption {
   keywords?: string[];
 }
 
-export const TEMPLATE_OPTIONS: TemplateOption[] = [
-  {
-    id: 3,
-    name: 'Phone Rental Service Template',
-    shortName: 'Phone Rental',
-    description: 'Phone Rental Agreement, Device Details & Fees',
-    keywords: ['phone', 'rental', 'agreement', 'device'],
-  },
-  {
-    id: 5,
-    name: 'CTOS CBM - Consent Form',
-    shortName: 'CTOS Consent Form',
-    description: 'Credit Check Consent Form',
-    keywords: ['ctos', 'cbm', 'consent'],
-  },
-];
-
-export function getTemplateOption(id: number): TemplateOption | undefined {
-  return TEMPLATE_OPTIONS.find((t) => t.id === id);
-}
-
 // In-Memory map for lightning fast access + Redis persistent backup
 const workflowSessions = new Map<string, ChatSessionWorkflow>();
 
 export class AgentWorkflowService {
+  private static cachedTemplates: TemplateOption[] = [];
+  private static templatesFetchedAt = 0;
+  private static readonly TEMPLATE_CACHE_TTL_MS = 60 * 1000; // 1 min cache
+
+  /**
+   * Fetch available unarchived templates dynamically from DocuSeal / Mobigo
+   */
+  static async getAvailableTemplates(forceRefresh = false): Promise<TemplateOption[]> {
+    const now = Date.now();
+    if (!forceRefresh && this.cachedTemplates.length > 0 && now - this.templatesFetchedAt < this.TEMPLATE_CACHE_TTL_MS) {
+      return this.cachedTemplates;
+    }
+
+    try {
+      const rawTemplates = await docusealService.listTemplates();
+      if (Array.isArray(rawTemplates) && rawTemplates.length > 0) {
+        // Strictly filter unarchived templates
+        const unarchived = rawTemplates.filter((t: any) => !t.archived_at && !t.archived);
+        this.cachedTemplates = unarchived.map((t: any) => {
+          const id = Number(t.id);
+          const name = t.name || `Template ${id}`;
+          const shortName = t.name || `Template ${id}`;
+          const keywords = [
+            t.name?.toLowerCase(),
+            t.slug?.toLowerCase(),
+            ...(t.name?.toLowerCase().split(/[\s\-_]+/) || []),
+          ].filter(Boolean);
+
+          return {
+            id,
+            name,
+            shortName,
+            description: t.description || '',
+            keywords,
+          };
+        });
+        this.templatesFetchedAt = now;
+        return this.cachedTemplates;
+      }
+    } catch (err: any) {
+      console.error('[AgentWorkflowService] Error loading dynamic templates:', err);
+    }
+
+    return this.cachedTemplates;
+  }
+
+  static async getTemplateOption(id?: number): Promise<TemplateOption | undefined> {
+    if (!id) return undefined;
+    const templates = await this.getAvailableTemplates();
+    return templates.find((t) => t.id === id);
+  }
+
   /**
    * Initialize and hydrate from Redis on startup
    */
@@ -226,24 +258,37 @@ export class AgentWorkflowService {
 
     // 6. Template selection (if awaiting template selection)
     if (session.state === AgentChatState.AWAITING_TEMPLATE_SELECTION) {
+      const templates = await AgentWorkflowService.getAvailableTemplates();
+      if (templates.length === 0) {
+        await sendTextMessage(
+          sessionId,
+          chatJid,
+          `⚠️ *No unarchived templates found on the server.* Please check your DocuSeal / Mobigo dashboard.`
+        );
+        return true;
+      }
+
       const choiceIndex = parseInt(trimmed, 10);
-      if (!isNaN(choiceIndex) && choiceIndex >= 1 && choiceIndex <= TEMPLATE_OPTIONS.length) {
-        session.selectedTemplateId = TEMPLATE_OPTIONS[choiceIndex - 1].id;
+      if (!isNaN(choiceIndex) && choiceIndex >= 1 && choiceIndex <= templates.length) {
+        const chosen = templates[choiceIndex - 1];
+        session.selectedTemplateId = chosen.id;
+        session.selectedTemplateName = chosen.name;
         await this.executeAiExtraction(sessionId, session);
         return true;
       }
 
-      // Keyword fallback (e.g. user typed "ctos" or "phone rental")
-      const matched = TEMPLATE_OPTIONS.find(
+      // Keyword match (e.g. user typed "ctos" or "phone rental")
+      const matched = templates.find(
         (t) => t.keywords?.some((k) => lower.includes(k)) || lower.includes(t.name.toLowerCase())
       );
       if (matched) {
         session.selectedTemplateId = matched.id;
+        session.selectedTemplateName = matched.name;
         await this.executeAiExtraction(sessionId, session);
         return true;
       }
 
-      const validOptions = TEMPLATE_OPTIONS.map((t, i) => `*${i + 1}* for *${t.name}*`).join(' or ');
+      const validOptions = templates.map((t, i) => `*${i + 1}* for *${t.name}*`).join(' or ');
       await sendTextMessage(
         sessionId,
         chatJid,
@@ -370,7 +415,7 @@ export class AgentWorkflowService {
       state: AgentChatState.COLLECTING,
       textNotes: [],
       bufferedFiles: [],
-      selectedTemplateId: 3, // Default Phone Rental Service Template
+      selectedTemplateId: undefined,
       extractedData: {},
       updatedAt: new Date().toISOString(),
     };
@@ -421,21 +466,35 @@ export class AgentWorkflowService {
       return;
     }
 
-    // If agent directly passed template option (e.g. "/ai 1" or "/ai 2") or keyword
+    // Refresh / get dynamic unarchived templates from API
+    const templates = await AgentWorkflowService.getAvailableTemplates(true);
+    if (templates.length === 0) {
+      await sendTextMessage(
+        sessionId,
+        session.chatJid,
+        `⚠️ *No unarchived templates found on the server.* Please make sure at least one template is published and unarchived in DocuSeal / Mobigo.`
+      );
+      return;
+    }
+
+    // If agent directly passed template option (e.g. "/ai 1" or "/ai 2" or "/ai ctos")
     const parts = rawText.split(/\s+/);
     if (parts.length > 1) {
-      const opt = parts[1].trim().toLowerCase();
+      const opt = parts.slice(1).join(' ').trim().toLowerCase();
       const choiceIndex = parseInt(opt, 10);
-      if (!isNaN(choiceIndex) && choiceIndex >= 1 && choiceIndex <= TEMPLATE_OPTIONS.length) {
-        session.selectedTemplateId = TEMPLATE_OPTIONS[choiceIndex - 1].id;
+      if (!isNaN(choiceIndex) && choiceIndex >= 1 && choiceIndex <= templates.length) {
+        const chosen = templates[choiceIndex - 1];
+        session.selectedTemplateId = chosen.id;
+        session.selectedTemplateName = chosen.name;
         await this.executeAiExtraction(sessionId, session);
         return;
       }
-      const matched = TEMPLATE_OPTIONS.find(
+      const matched = templates.find(
         (t) => t.keywords?.some((k) => opt.includes(k)) || opt.includes(t.name.toLowerCase())
       );
       if (matched) {
         session.selectedTemplateId = matched.id;
+        session.selectedTemplateName = matched.name;
         await this.executeAiExtraction(sessionId, session);
         return;
       }
@@ -445,8 +504,8 @@ export class AgentWorkflowService {
     session.state = AgentChatState.AWAITING_TEMPLATE_SELECTION;
     await this.saveSession(session);
 
-    const templateOptionsText = TEMPLATE_OPTIONS.map(
-      (t, idx) => `${idx + 1}️⃣ *${t.name}* _(ID: ${t.id})_`
+    const templateOptionsText = templates.map(
+      (t, idx) => `${idx + 1}️⃣ *${t.name}*`
     ).join('\n');
 
     const templatePrompt =
@@ -454,7 +513,7 @@ export class AgentWorkflowService {
       `━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `${templateOptionsText}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-      `👉 *Reply ${TEMPLATE_OPTIONS.map((_, i) => i + 1).join(' or ')} to select the template.*`;
+      `👉 *Reply ${templates.map((_, i) => i + 1).join(' or ')} to select the template.*`;
 
     await sendTextMessage(sessionId, session.chatJid, templatePrompt);
   }
@@ -463,7 +522,19 @@ export class AgentWorkflowService {
    * Execute AI Extraction for the Selected Template
    */
   private static async executeAiExtraction(sessionId: string, session: ChatSessionWorkflow): Promise<void> {
-    const tpl = getTemplateOption(session.selectedTemplateId) || TEMPLATE_OPTIONS[0];
+    const templates = await this.getAvailableTemplates();
+    const tpl = (session.selectedTemplateId ? templates.find((t) => t.id === session.selectedTemplateId) : undefined) || templates[0];
+    if (!tpl) {
+      await sendTextMessage(
+        sessionId,
+        session.chatJid,
+        `❌ *Error:* No template found. Please check your DocuSeal / Mobigo dashboard.`
+      );
+      return;
+    }
+    const templateId = tpl.id;
+    session.selectedTemplateId = templateId;
+    session.selectedTemplateName = tpl.name;
     const templateName = tpl.name;
 
     await sendTextMessage(
@@ -473,7 +544,6 @@ export class AgentWorkflowService {
     );
 
     try {
-      const templateId = session.selectedTemplateId || 3;
       const extracted = await MobigoAiService.extractContractData(session.textNotes, session.bufferedFiles, templateId);
 
       // Smart Defaults for missing contract values
@@ -522,11 +592,16 @@ export class AgentWorkflowService {
     const year = String(now.getFullYear());
     const currentDate = `${day}/${month}/${year}`;
 
-    if (session.selectedTemplateId === 5) {
-      // Template 5: CTOS CBM Consent Form
+    const templates = await this.getAvailableTemplates();
+    const tpl = (session.selectedTemplateId ? templates.find((t) => t.id === session.selectedTemplateId) : undefined) || templates[0];
+    const tplName = (tpl?.name || session.selectedTemplateName || '').toLowerCase();
+    const isCtos = tplName.includes('ctos') || tplName.includes('consent') || session.selectedTemplateId === 5;
+
+    if (isCtos) {
+      // CTOS CBM Consent Form
       const reviewMsg =
         `📋 *Mobigo Contract Draft Details*\n` +
-        `📑 *Template:* CTOS CBM - Consent Form (ID: 5)\n` +
+        `📑 *Template:* ${tpl?.name || 'CTOS CBM - Consent Form'}\n` +
         `━━━━━━━━━━━━━━━━━━━━━━━\n` +
         `👤 *1. RECIPIENT & DELIVERY INFO*\n` +
         `1. *Recipient Name:* ${d.name || '_(Missing)_'}\n` +
@@ -547,10 +622,10 @@ export class AgentWorkflowService {
       return;
     }
 
-    // Default: Template 3 (Phone Rental Service Template)
+    // Default / Agreement Template
     const reviewMsg =
       `📋 *Mobigo Contract Draft Details*\n` +
-      `📑 *Template:* Phone Rental Service Template (ID: 3)\n` +
+      `📑 *Template:* ${tpl?.name || 'Phone Rental Service Template'}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `👤 *1. RECIPIENT & DELIVERY INFO (First Party)*\n` +
       `1. *Recipient Name:* ${d.name || '_(Missing)_'}\n` +
@@ -602,7 +677,12 @@ export class AgentWorkflowService {
         val = `RM ${val}`;
       }
 
-      if (session.selectedTemplateId === 5) {
+      const templates = await this.getAvailableTemplates();
+      const tpl = (session.selectedTemplateId ? templates.find((t) => t.id === session.selectedTemplateId) : undefined) || templates[0];
+      const tplName = (tpl?.name || session.selectedTemplateName || '').toLowerCase();
+      const isCtos = tplName.includes('ctos') || tplName.includes('consent') || session.selectedTemplateId === 5;
+
+      if (isCtos) {
         switch (fieldIdx) {
           case 1: d.name = val; break;
           case 2: d.email = val; break;
@@ -729,13 +809,17 @@ export class AgentWorkflowService {
     );
 
     try {
-      const templateId = session.selectedTemplateId || 3;
+      const templates = await this.getAvailableTemplates();
+      const tpl = (session.selectedTemplateId ? templates.find((t) => t.id === session.selectedTemplateId) : undefined) || templates[0];
+      const templateId = session.selectedTemplateId || tpl?.id;
+      if (!templateId) {
+        throw new Error('No valid unarchived template found on server.');
+      }
       const submitters = docusealService.buildSubmittersPayload(d);
 
       const branchName = d.branch_name ? d.branch_name.trim() : '';
       const orderNum = d.order_number ? d.order_number.trim() : '';
-      const tpl = getTemplateOption(session.selectedTemplateId) || TEMPLATE_OPTIONS[0];
-      const baseDocName = tpl.shortName;
+      const baseDocName = tpl?.shortName || tpl?.name || 'Agreement';
       let submissionName = orderNum ? `${baseDocName} ${orderNum}` : baseDocName;
       if (branchName) submissionName += ` (${branchName})`;
 
@@ -768,7 +852,7 @@ export class AgentWorkflowService {
         signingUrl = `${publicBase}/submissions/${subId}`;
       }
 
-      const templateName = tpl.name;
+      const templateName = tpl?.name || 'Document Agreement';
 
       const successMsg =
         `🎉 *DocuSeal Submission Created!* 🎉\n` +
