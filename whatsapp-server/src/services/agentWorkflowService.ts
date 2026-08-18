@@ -295,7 +295,11 @@ export class AgentWorkflowService {
         mimetype: mimetype || 'application/octet-stream',
         fileBuffer,
         filePath,
+        caption: trimmed || undefined,
       });
+      if (trimmed) {
+        session.textNotes.push(trimmed);
+      }
       session.state = AgentChatState.COLLECTING;
       await this.saveSession(session);
 

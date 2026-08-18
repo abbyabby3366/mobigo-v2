@@ -867,8 +867,8 @@ module AiSubmissionExtractor
     end
 
     # Explicitly capture branch_name from root fields, AI fields, or regex scan
-    raw_branch_name = raw_fields['branch_name'] || raw_fields['Branch Name'] || raw_fields['branch'] || raw_fields['cawangan'] || raw_fields['nama_cawangan']
-    if raw_branch_name.blank? && content =~ /(?:branch(?:\s*name)?|cawangan(?:\s*name)?|nama\s*cawangan)\s*[:=\-]\s*([^\r\n,]+)/i
+    raw_branch_name = raw_fields['branch_name'] || raw_fields['Branch Name'] || raw_fields['branch'] || raw_fields['cawangan'] || raw_fields['nama_cawangan'] || parsed_data.dig('fields', 'branch_name')
+    if raw_branch_name.blank? && content =~ /(?:\(\d+\)\s*)?(?:branch(?:\s*name)?|cawangan(?:\s*name)?|nama\s*cawangan)\s*[:=\-]\s*([^\r\n,]+)/i
       raw_branch_name = Regexp.last_match(1).to_s.strip
     end
     if raw_branch_name.present?
@@ -911,6 +911,10 @@ module AiSubmissionExtractor
       sub_email = s_data['email'].presence || fields_hash['E-mel ("Pihak B")'].presence || english_fields['recipient_email'].presence || ''
       sub_name = s_data['name'].presence || fields_hash['Nama Penerima ("Pihak B")'].presence || english_fields['recipient_name'].presence || ''
       sub_phone = s_data['phone'].presence || fields_hash['Nombor Telefon ("Pihak B")'].presence || english_fields['recipient_phone'].presence || ''
+
+      if raw_branch_name.present?
+        s_values['branch_name'] = raw_branch_name
+      end
 
       {
         'uuid' => ts['uuid'],

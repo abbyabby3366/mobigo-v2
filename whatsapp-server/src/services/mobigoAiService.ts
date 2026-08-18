@@ -89,7 +89,7 @@ export class MobigoAiService {
 
     const data = (await res.json()) as any;
     const firstSub = data.submitters?.[0] || {};
-    const values = firstSub.values || data.fields || data.extracted || data || {};
+    const values = { ...(data.fields || {}), ...(data.english_fields || {}), ...(firstSub.values || {}) };
 
     // Map DocuSeal field names to our internal names
     const nameVal = firstSub.name || values['Name'] || values['Nama'] || values['name'] || '';
@@ -112,7 +112,7 @@ export class MobigoAiService {
     const productPrice = values['Harga Produk'] || values['product_price'] || '';
     const orderNum = values['Nombor Pesanan'] || values['order_number'] || '';
 
-    // Extract branch name (raw field) - check AI fields and text notes fallback
+    // Extract branch name (raw field) - check AI fields, root fields, and text/file fallbacks
     let branchName =
       values['branch_name'] ||
       values['Branch Name'] ||
@@ -122,11 +122,25 @@ export class MobigoAiService {
       values['cawangan'] ||
       values['Nama Cawangan'] ||
       values['nama_cawangan'] ||
+      data.fields?.['branch_name'] ||
+      data.english_fields?.['branch_name'] ||
       '';
 
-    if (!branchName && textNotes.length > 0) {
-      const fullText = textNotes.join('\n');
-      const branchRegex = /(?:branch(?:\s*name)?|cawangan(?:\s*name)?|nama\s*cawangan)\s*[:=\-]\s*([^\r\n,]+)/i;
+    if (!branchName) {
+      const textsToScan: string[] = [...textNotes];
+      for (const f of files) {
+        if (f.caption) textsToScan.push(f.caption);
+        if (f.fileBuffer) {
+          try {
+            const str = f.fileBuffer.toString('utf8');
+            if (/[\w\s]{4,}/.test(str)) {
+              textsToScan.push(str);
+            }
+          } catch (_) {}
+        }
+      }
+      const fullText = textsToScan.join('\n');
+      const branchRegex = /(?:\(\d+\)\s*)?(?:branch(?:\s*name)?|cawangan(?:\s*name)?|nama\s*cawangan)\s*[:=\-]\s*([^\r\n,]+)/i;
       const match = fullText.match(branchRegex);
       if (match && match[1]) {
         branchName = match[1].trim();

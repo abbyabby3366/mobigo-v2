@@ -1,3 +1,4 @@
+import fs from 'fs';
 import axios from 'axios';
 import { ExtractedDocumentData } from './mobigoAiService.js';
 
@@ -31,9 +32,17 @@ export class DocuSealService {
   getApiUrl(): string {
     const isProd = process.env.NODE_ENV === 'production' || process.env.APP_ENV === 'production';
     if (isProd) {
-      return (process.env.PROD_DOCUSEAL_URL || process.env.MOBIGO_API_URL || process.env.DOCUSEAL_API_URL || 'https://mobigo.io7.my').replace(/\/+$/, '');
+      return (process.env.PROD_DOCUSEAL_URL || process.env.MOBIGO_API_URL || 'https://mobigo.io7.my').replace(/\/+$/, '');
     }
-    return (process.env.DOCUSEAL_API_URL || process.env.DEV_DOCUSEAL_URL || 'http://localhost:3000').replace(/\/+$/, '');
+
+    // Inside Docker container: localhost refers to the container itself, so we route to http://app:3000
+    const isInsideDocker = fs.existsSync('/.dockerenv') || process.env.IS_DOCKER === 'true';
+    if (isInsideDocker) {
+      const url = process.env.DOCUSEAL_API_URL || process.env.DEV_DOCUSEAL_URL || 'http://app:3000';
+      return url.replace('localhost:3000', 'app:3000').replace('127.0.0.1:3000', 'app:3000').replace(/\/+$/, '');
+    }
+
+    return (process.env.DEV_DOCUSEAL_URL || process.env.DOCUSEAL_API_URL || 'http://localhost:3000').replace(/\/+$/, '');
   }
 
   getApiKey(): string {
