@@ -11,8 +11,21 @@ class DashboardController < ApplicationController
 
   def index
     if cookies.permanent[:dashboard_view] == 'templates'
-      TemplatesDashboardController.dispatch(:index, request, response)
+      if params[:template_password].present?
+        if params[:template_password] == '1234'
+          session[:templates_unlocked] = true
+          TemplatesDashboardController.dispatch(:index, request, response)
+        else
+          @template_password_error = true
+          render 'dashboard/template_password_gate'
+        end
+      elsif session[:templates_unlocked]
+        TemplatesDashboardController.dispatch(:index, request, response)
+      else
+        render 'dashboard/template_password_gate'
+      end
     else
+      session.delete(:templates_unlocked)
       SubmissionsDashboardController.dispatch(:index, request, response)
     end
   end

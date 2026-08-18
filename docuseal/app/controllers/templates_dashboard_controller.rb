@@ -4,6 +4,8 @@ class TemplatesDashboardController < ApplicationController
   load_and_authorize_resource :template_folder, parent: false
   load_and_authorize_resource :template, parent: false
 
+  before_action :check_template_access
+
   SHOW_TEMPLATES_FOLDERS_THRESHOLD = 9
   TEMPLATES_PER_PAGE = 12
   FOLDERS_PER_PAGE = 18
@@ -132,5 +134,20 @@ class TemplatesDashboardController < ApplicationController
                                      .order(id: :desc)
 
     pagy_auto(related_submissions.select_for_list, limit: 5)
+  end
+
+  def check_template_access
+    return if session[:templates_unlocked]
+
+    if params[:template_password].present?
+      if params[:template_password] == '1234'
+        session[:templates_unlocked] = true
+        return
+      else
+        @template_password_error = true
+      end
+    end
+
+    render 'dashboard/template_password_gate'
   end
 end

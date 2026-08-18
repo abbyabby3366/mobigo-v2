@@ -15,3 +15,4 @@ export default class extends HTMLElement {
     return this.querySelector('button, label')
   }
 }
+
