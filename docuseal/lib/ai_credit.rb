@@ -7,7 +7,8 @@ require 'uri'
 module AiCredit
   DEFAULT_ROUTER_URL = 'https://router.oino.dev/v1/chat/completions'
   DEFAULT_ROUTER_KEY = 'sk-e5b95619ac694e0a-a72568-c2160a10'
-  DEFAULT_MODEL = 'antigravity/gemini-3.6-flash-medium'
+  DEFAULT_MODEL = 'cx/gpt-5.6-luna'
+  DEFAULT_FALLBACK_MODEL = 'antigravity/gemini-3.6-flash-medium'
 
   module_function
 
@@ -24,6 +25,11 @@ module AiCredit
   def model(account)
     mdl = account&.account_configs&.find_by(key: AccountConfig::AI_ROUTER_MODEL)&.value
     mdl.presence || ENV.fetch('AI_ROUTER_MODEL', DEFAULT_MODEL)
+  end
+
+  def fallback_model(account)
+    mdl = account&.account_configs&.find_by(key: AccountConfig::AI_ROUTER_FALLBACK_MODEL)&.value
+    mdl.presence || ENV.fetch('AI_ROUTER_FALLBACK_MODEL', DEFAULT_FALLBACK_MODEL)
   end
 
   def balance(account)
@@ -49,7 +55,7 @@ module AiCredit
     config.value
   end
 
-  def set_credentials(account, key:, url: nil, model: nil)
+  def set_credentials(account, key:, url: nil, model: nil, fallback_model: nil)
     return if account.nil?
 
     if key.present?
@@ -68,6 +74,12 @@ module AiCredit
       cfg_mdl = account.account_configs.find_or_initialize_by(key: AccountConfig::AI_ROUTER_MODEL)
       cfg_mdl.value = model.to_s.strip
       cfg_mdl.save!
+    end
+
+    if fallback_model.present?
+      cfg_fb = account.account_configs.find_or_initialize_by(key: AccountConfig::AI_ROUTER_FALLBACK_MODEL)
+      cfg_fb.value = fallback_model.to_s.strip
+      cfg_fb.save!
     end
   end
 

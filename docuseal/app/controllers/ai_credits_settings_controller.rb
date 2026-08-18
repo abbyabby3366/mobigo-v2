@@ -10,14 +10,16 @@ class AiCreditsSettingsController < ApplicationController
     @api_key = AiCredit.api_key(current_account)
     @api_url = AiCredit.api_url(current_account)
     @model = AiCredit.model(current_account)
+    @fallback_model = AiCredit.fallback_model(current_account)
   end
 
   def create
     key = params[:ai_router_key]
     url = params[:ai_router_url]
     model = params[:ai_router_model]
+    fallback_model = params[:ai_router_fallback_model]
 
-    AiCredit.set_credentials(current_account, key: key, url: url, model: model)
+    AiCredit.set_credentials(current_account, key: key, url: url, model: model, fallback_model: fallback_model)
 
     redirect_to settings_ai_credits_path, notice: 'AI Provider API credentials saved successfully.'
   end

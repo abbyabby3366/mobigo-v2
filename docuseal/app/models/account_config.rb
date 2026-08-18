@@ -68,6 +68,7 @@ class AccountConfig < ApplicationRecord
   AI_ROUTER_KEY = 'ai_router_key'
   AI_ROUTER_URL = 'ai_router_url'
   AI_ROUTER_MODEL = 'ai_router_model'
+  AI_ROUTER_FALLBACK_MODEL = 'ai_router_fallback_model'
   AI_CREDIT_BALANCE = 'ai_credit_balance'
 
   EMAIL_VARIABLES = {

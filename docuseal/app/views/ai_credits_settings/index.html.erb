@@ -87,19 +87,19 @@
             </p>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label class="label text-xs font-semibold uppercase opacity-70 pb-1" for="ai_router_url">
-                AI Router Endpoint URL
-              </label>
-              <input type="text"
-                     id="ai_router_url"
-                     name="ai_router_url"
-                     value="<%= @api_url %>"
-                     placeholder="https://router.oino.dev/v1/chat/completions"
-                     class="input input-bordered w-full font-mono text-xs focus:input-primary" />
-            </div>
+          <div>
+            <label class="label text-xs font-semibold uppercase opacity-70 pb-1" for="ai_router_url">
+              AI Router Endpoint URL
+            </label>
+            <input type="text"
+                   id="ai_router_url"
+                   name="ai_router_url"
+                   value="<%= @api_url %>"
+                   placeholder="https://router.oino.dev/v1/chat/completions"
+                   class="input input-bordered w-full font-mono text-xs focus:input-primary" />
+          </div>
 
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="label text-xs font-semibold uppercase opacity-70 pb-1" for="ai_router_model">
                 Primary AI Model
@@ -108,8 +108,22 @@
                      id="ai_router_model"
                      name="ai_router_model"
                      value="<%= @model %>"
+                     placeholder="cx/gpt-5.6-luna"
+                     class="input input-bordered w-full font-mono text-xs focus:input-primary" />
+              <p class="text-[11px] opacity-60 mt-1">Main model used for AI extraction and reasoning.</p>
+            </div>
+
+            <div>
+              <label class="label text-xs font-semibold uppercase opacity-70 pb-1" for="ai_router_fallback_model">
+                Fallback AI Model
+              </label>
+              <input type="text"
+                     id="ai_router_fallback_model"
+                     name="ai_router_fallback_model"
+                     value="<%= @fallback_model %>"
                      placeholder="antigravity/gemini-3.6-flash-medium"
                      class="input input-bordered w-full font-mono text-xs focus:input-primary" />
+              <p class="text-[11px] opacity-60 mt-1">Used automatically if the primary model fails or times out.</p>
             </div>
           </div>
 

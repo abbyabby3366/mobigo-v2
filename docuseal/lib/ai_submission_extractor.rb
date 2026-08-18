@@ -7,9 +7,12 @@ require 'base64'
 module AiSubmissionExtractor
   DEFAULT_ROUTER_URL = 'https://router.oino.dev/v1/chat/completions'
   DEFAULT_API_KEY = 'sk-e5b95619ac694e0a-a72568-c2160a10'
-  DEFAULT_MODEL = 'antigravity/gemini-3.6-flash-medium'
+  DEFAULT_MODEL = 'cx/gpt-5.6-luna'
+  DEFAULT_FALLBACK_MODEL = 'antigravity/gemini-3.6-flash-medium'
   FALLBACK_MODELS = [
     'antigravity/gemini-3.6-flash-medium',
+    'antigravity/3.6flash',
+    'antigravity/gemini-3.6-flash',
     'cursor/gemini-3.6-flash-medium',
     'auto/gemini',
     'gemini-3.6-flash'
@@ -22,13 +25,14 @@ module AiSubmissionExtractor
     api_url = AiCredit.api_url(acc)
     api_key = AiCredit.api_key(acc)
     primary_model = AiCredit.model(acc)
+    fallback_model = AiCredit.fallback_model(acc)
 
     prompt_parts = build_prompt_parts(template, text, files)
 
     response_json = nil
     errors = []
 
-    models_to_try = ([primary_model] + FALLBACK_MODELS).uniq
+    models_to_try = ([primary_model, fallback_model] + FALLBACK_MODELS).compact.map(&:to_s).map(&:strip).reject(&:blank?).uniq
 
     models_to_try.each do |model|
       begin
