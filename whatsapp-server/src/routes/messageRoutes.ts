@@ -130,7 +130,7 @@ router.post(['/send-submission', '/:session_id/send-submission'], async (req: Re
 
     const submitter = submission?.submitters?.[0] || submission?.[0]?.submitters?.[0];
     const slug = submitter?.slug;
-    const host = process.env.DOCUSEAL_API_URL || 'http://localhost:3000';
+    const host = docusealService.getPublicUrl();
     const signingUrl = slug ? `${host}/s/${slug}` : undefined;
 
     const messageText = custom_message

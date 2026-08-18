@@ -838,16 +838,21 @@ export class AgentWorkflowService {
       const slug = firstSubmitter?.slug;
       const subId = firstSubmitter?.submission_id || firstSubmitter?.id || 'OK';
 
-      // Determine public base URL for browser-accessible signing link
-      const publicBase = (process.env.DOCUSEAL_PUBLIC_URL || process.env.MOBIGO_API_URL || 'http://localhost:3000')
-        .replace(/\/+$/, '')
-        .replace('http://app:3000', 'http://localhost:3000');
+      // Determine public base URL for browser-accessible signing link (respects NODE_ENV / PROD_DOCUSEAL_URL / DEV_DOCUSEAL_URL)
+      const publicBase = docusealService.getPublicUrl();
 
       let signingUrl = '';
       if (slug) {
         signingUrl = `${publicBase}/s/${slug}`;
       } else if (firstSubmitter?.embed_src) {
-        signingUrl = firstSubmitter.embed_src;
+        try {
+          const urlObj = new URL(firstSubmitter.embed_src);
+          signingUrl = `${publicBase}${urlObj.pathname}${urlObj.search}`;
+        } catch {
+          signingUrl = firstSubmitter.embed_src.startsWith('http')
+            ? firstSubmitter.embed_src
+            : `${publicBase}/${firstSubmitter.embed_src.replace(/^\/+/, '')}`;
+        }
       } else {
         signingUrl = `${publicBase}/submissions/${subId}`;
       }
