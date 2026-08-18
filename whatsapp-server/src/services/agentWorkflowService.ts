@@ -51,18 +51,36 @@ export class AgentWorkflowService {
     }
   }
 
-  static getSession(chatJid: string): ChatSessionWorkflow | undefined {
-    return workflowSessions.get(chatJid);
+  static getSession(chatJid: string, senderPhone?: string): ChatSessionWorkflow | undefined {
+    let s = workflowSessions.get(chatJid);
+    if (!s && senderPhone) {
+      const cleanPhone = senderPhone.replace(/[^0-9]/g, '');
+      if (cleanPhone.length >= 8) {
+        for (const sess of workflowSessions.values()) {
+          const sessPhone = (sess.senderPhone || '').replace(/[^0-9]/g, '');
+          if (sessPhone === cleanPhone && sess.state !== AgentChatState.IDLE) {
+            return sess;
+          }
+        }
+      }
+    }
+    return s;
   }
 
-  static isAgentChat(chatJid: string): boolean {
-    const s = workflowSessions.get(chatJid);
+  static isAgentChat(chatJid: string, senderPhone?: string): boolean {
+    const s = this.getSession(chatJid, senderPhone);
     return !!s && s.state !== AgentChatState.IDLE;
   }
 
   static async saveSession(session: ChatSessionWorkflow): Promise<void> {
     session.updatedAt = new Date().toISOString();
     workflowSessions.set(session.chatJid, session);
+    if (session.senderPhone) {
+      const cleanPhone = session.senderPhone.replace(/[^0-9]/g, '');
+      if (cleanPhone) {
+        workflowSessions.set(`${cleanPhone}@s.whatsapp.net`, session);
+      }
+    }
 
     const redis = getRedisClient();
     if (redis) {
@@ -72,8 +90,14 @@ export class AgentWorkflowService {
     }
   }
 
-  static async deleteSession(chatJid: string): Promise<void> {
+  static async deleteSession(chatJid: string, senderPhone?: string): Promise<void> {
     workflowSessions.delete(chatJid);
+    if (senderPhone) {
+      const cleanPhone = senderPhone.replace(/[^0-9]/g, '');
+      if (cleanPhone) {
+        workflowSessions.delete(`${cleanPhone}@s.whatsapp.net`);
+      }
+    }
     const redis = getRedisClient();
     if (redis) {
       try {
@@ -107,11 +131,24 @@ export class AgentWorkflowService {
       return true;
     }
 
-    // Check if this chat is in active agent mode
-    const session = this.getSession(chatJid);
+    // Check if this chat is in active agent mode (lookup by chatJid OR senderPhone)
+    let session = this.getSession(chatJid, senderPhone);
+
+    // Auto-recover session if user sends /ai or /reset even if server restarted
     if (!session || session.state === AgentChatState.IDLE) {
-      return false; // Let standard handling proceed
+      if (lower === '/ai' || lower === 'ai' || lower.startsWith('/ai ') || lower.startsWith('/extract')) {
+        await this.handleStartCommand(sessionId, chatJid, senderPhone, pushName);
+        session = this.getSession(chatJid, senderPhone);
+      } else {
+        return false; // Let standard handling proceed
+      }
     }
+
+    if (!session) return false;
+
+    // Keep session destination chatJid fresh
+    session.chatJid = chatJid;
+    if (senderPhone) session.senderPhone = senderPhone;
 
     // 2. /stop command
     if (lower === '/stop' || lower === 'stop agent') {
@@ -168,15 +205,49 @@ export class AgentWorkflowService {
     }
 
     // 7. Proceed / Submit command
-    if (lower === 'proceed' || lower === 'submit' || lower === '/submit' || lower === 'confirm' || lower === 'yes') {
+    if (
+      lower === '/proceed' ||
+      lower === 'proceed' ||
+      lower === '/submit' ||
+      lower === 'submit' ||
+      lower === 'confirm' ||
+      lower === 'yes'
+    ) {
       await this.handleProceedCommand(sessionId, session);
       return true;
     }
 
-    // 8. Handle Field Edit (e.g. "1 Mohammad Ali" or "Name: John Doe")
+    // 8. Handle Field Edit (e.g. "1 Mohammad Ali" or "2 email@gmail.com") in REVIEWING or AWAITING_MISSING_FIELD state
     if (session.state === AgentChatState.REVIEWING || session.state === AgentChatState.AWAITING_MISSING_FIELD) {
       const handled = await this.tryHandleFieldEdit(sessionId, session, trimmed);
       if (handled) return true;
+
+      // If user typed an unknown command starting with '/' in review mode
+      if (trimmed.startsWith('/')) {
+        await sendTextMessage(
+          sessionId,
+          chatJid,
+          `⚠️ *Command not detected: ${trimmed}*\n\n` +
+          `• To generate DocuSeal signing link: send */proceed*\n` +
+          `• To re-extract details: send */ai*\n` +
+          `• To reset draft: send */reset*\n` +
+          `• For assistance: send */help*`
+        );
+        return true;
+      }
+
+      // If user typed normal text in review mode that didn't match a field edit
+      if (!hasMedia && trimmed) {
+        await sendTextMessage(
+          sessionId,
+          chatJid,
+          `⚠️ *Didn't quite get what you said, please repeat.*\n\n` +
+          `• To edit a field: reply with the number and value (e.g. *2 customer@gmail.com*)\n` +
+          `• To confirm and generate contract: send */proceed*\n` +
+          `• To reset draft: send */reset*`
+        );
+        return true;
+      }
     }
 
     // 9. Ingest media / text notes into the current buffer
@@ -200,8 +271,21 @@ export class AgentWorkflowService {
       return true;
     }
 
-    // Ingest plain text note
-    if (trimmed && !trimmed.startsWith('/')) {
+    // 10. Unknown command starting with '/' in COLLECTING mode
+    if (trimmed.startsWith('/')) {
+      await sendTextMessage(
+        sessionId,
+        chatJid,
+        `⚠️ *Command not detected: ${trimmed}*\n\n` +
+        `• Send customer photos (IC, payslips) or text notes\n` +
+        `• Send */ai* to extract contract details\n` +
+        `• Send */help* for available commands`
+      );
+      return true;
+    }
+
+    // 11. Ingest plain text note in COLLECTING mode
+    if (trimmed) {
       session.textNotes.push(trimmed);
       session.state = AgentChatState.COLLECTING;
       await this.saveSession(session);

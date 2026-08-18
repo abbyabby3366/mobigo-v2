@@ -57,19 +57,31 @@ export class MobigoAiService {
     const endpoint = `${baseUrl}/api/ai_submissions/extract`;
     console.log(`[MobigoAiService] POST ${endpoint} (template_id: ${templateId}, files: ${files.length}, notes: ${textNotes.length})`);
 
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        // Do not set Content-Type header manually; fetch automatically sets multipart/form-data boundary
-        'X-Auth-Token': apiKey,
-      },
-      body: formData,
-      signal: AbortSignal.timeout(60000),
-    });
+    let res: Response;
+    try {
+      res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          // Do not set Content-Type header manually; fetch automatically sets multipart/form-data boundary
+          'X-Auth-Token': apiKey,
+        },
+        body: formData,
+        signal: AbortSignal.timeout(45000), // 45s timeout for AI extraction
+      });
+    } catch (networkErr: any) {
+      console.error('[MobigoAiService] Network error reaching endpoint:', networkErr);
+      throw new Error(`Failed to reach Mobigo/DocuSeal server at ${endpoint}: ${networkErr.message}`);
+    }
 
     if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      throw new Error(`Mobigo API error (${res.status}): ${errText || res.statusText}`);
+      let errDetail = '';
+      try {
+        const errJson: any = await res.json();
+        errDetail = errJson.error || errJson.message || JSON.stringify(errJson);
+      } catch (_) {
+        errDetail = await res.text().catch(() => '');
+      }
+      throw new Error(`Mobigo API error (${res.status}): ${errDetail || res.statusText}`);
     }
 
     const data = (await res.json()) as any;

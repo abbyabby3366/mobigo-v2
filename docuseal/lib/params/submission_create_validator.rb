@@ -85,8 +85,6 @@ module Params
       email_format(submitter_params, :email, message: 'email is invalid')
       email_format(submitter_params, :reply_to, message: 'reply_to email is invalid')
       type(submitter_params, :phone, String)
-      format(submitter_params, :phone, /\A\+\d+\z/,
-             message: 'phone should start with +<country code> and contain only digits')
       type(submitter_params, :values, Hash)
       type(submitter_params, :metadata, Hash)
       boolean(submitter_params, :send_email)

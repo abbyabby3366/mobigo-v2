@@ -6,7 +6,8 @@ export interface DocuSealSubmitter {
   phone?: string;
   name?: string;
   role?: string;
-  fields?: Record<string, any> | Array<{ name: string; default_value?: any; value?: any }>;
+  values?: Record<string, any>;
+  fields?: Array<{ name: string; default_value?: any; value?: any }>;
 }
 
 export interface CreateSubmissionParams {
@@ -148,9 +149,9 @@ export class DocuSealService {
     const submitter: DocuSealSubmitter = {
       name: data.name || 'Customer',
       email: data.email || 'customer@mobigo.com',
-      phone: data.phone_number || '',
+      phone: data.phone_number || undefined,
       role: 'First Party',
-      fields: fieldsMap,
+      values: fieldsMap,
     };
 
     return [submitter];
