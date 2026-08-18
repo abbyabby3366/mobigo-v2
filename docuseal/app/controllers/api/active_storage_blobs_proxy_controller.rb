@@ -46,7 +46,9 @@ module Api
             response.headers['Content-Type'] = blob.content_type_for_serving
             head :ok
           else
-            send_blob_stream blob, disposition: params[:disposition]
+            custom_filename = resolve_download_filename(attachment, blob)
+            blob.filename = ActiveStorage::Filename.new(custom_filename)
+            send_blob_stream blob, disposition: params[:disposition] || 'attachment'
           end
 
           response.headers['Content-Length'] = blob.byte_size.to_s
@@ -56,6 +58,54 @@ module Api
     # rubocop:enable Metrics
 
     private
+
+    def resolve_download_filename(attachment, blob)
+      return blob.filename.to_s unless blob.content_type.to_s.include?('pdf') || blob.filename.to_s.downcase.end_with?('.pdf')
+
+      submitter = nil
+      submission = nil
+
+      if @record.is_a?(Submitter)
+        submitter = @record
+        submission = submitter.submission
+      elsif @record.is_a?(Submission)
+        submission = @record
+        submitter = submission.submitters.where.not(completed_at: nil).order(:completed_at).last || submission.submitters.first
+      end
+
+      if submitter && submission
+        # Extract order number
+        order_number = nil
+        (submission.template_fields || submission.template&.fields || []).each do |field|
+          next unless field['name'].to_s.downcase =~ /\b(pesanan|order)\b/i
+
+          val = submitter.values[field['uuid']] || submitter.values[field['name']]
+          if val.present?
+            order_number = val.to_s.strip
+            break
+          end
+        end
+
+        # Extract branch name
+        branch_name = nil
+        if submission.name.present? && submission.name =~ /\((.*?)\)/
+          branch_name = Regexp.last_match(1).to_s.strip
+        elsif submitter.values['branch_name'].present?
+          branch_name = submitter.values['branch_name'].to_s.strip
+        end
+
+        base_title = submission.template&.name.to_s.downcase.include?('ctos') ? 'CTOS Consent Form' : 'Phone Rental'
+        parts = [base_title]
+        parts << order_number if order_number.present?
+        result_title = parts.join(' ')
+        result_title = "#{result_title} (#{branch_name})" if branch_name.present?
+
+        return "#{result_title}.pdf"
+      end
+
+      clean_name = blob.filename.to_s.gsub(/\s*27062026/i, '').strip
+      clean_name.presence || 'Phone Rental.pdf'
+    end
 
     def authorization_check!(attachment, record, exp)
       return if attachment.name == 'logo'

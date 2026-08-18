@@ -1,4 +1,4 @@
-import { getRedisClient } from './redisAuthState.js';
+import { getRedisClient, formatRedisKey } from './redisAuthState.js';
 import { IWhatsAppSessionData, IAgentPhoneNumber, SessionStatus } from '../types/index.js';
 import fs from 'fs';
 import path from 'path';
@@ -48,7 +48,7 @@ export class SessionStore {
     const redis = getRedisClient();
     if (redis) {
       try {
-        const keys = await redis.keys('wa_session_meta:*');
+        const keys = await redis.keys(formatRedisKey('wa_session_meta:*'));
         for (const key of keys) {
           const raw = await redis.get(key);
           if (raw) {
@@ -154,7 +154,7 @@ export class SessionStore {
     const redis = getRedisClient();
     if (redis) {
       try {
-        await redis.del(`wa_session_meta:${session.session_id}`);
+        await redis.del(formatRedisKey(`wa_session_meta:${session.session_id}`));
       } catch (_) {}
     }
     return true;
@@ -191,7 +191,7 @@ export class SessionStore {
     const redis = getRedisClient();
     if (redis) {
       try {
-        await redis.set(`wa_session_meta:${session.session_id}`, JSON.stringify(session));
+        await redis.set(formatRedisKey(`wa_session_meta:${session.session_id}`), JSON.stringify(session));
       } catch (err) {
         console.error(`[SessionStore] Redis persist error for ${session.session_id}:`, err);
       }

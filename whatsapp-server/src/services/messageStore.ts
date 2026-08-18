@@ -1,4 +1,4 @@
-import { getRedisClient } from './redisAuthState.js';
+import { getRedisClient, formatRedisKey } from './redisAuthState.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -82,7 +82,7 @@ export class MessageStore {
     const redis = getRedisClient();
     if (redis) {
       try {
-        const raw = await redis.get('wa_chat_history_list');
+        const raw = await redis.get(formatRedisKey('wa_chat_history_list'));
         if (raw) {
           const arr: IChatMessage[] = JSON.parse(raw);
           if (Array.isArray(arr) && arr.length > 0) {
@@ -212,7 +212,7 @@ export class MessageStore {
     saveLocalMessages(messageCache);
     const redis = getRedisClient();
     if (redis) {
-      redis.set('wa_chat_history_list', JSON.stringify(messageCache.slice(-2000))).catch((err) => {
+      redis.set(formatRedisKey('wa_chat_history_list'), JSON.stringify(messageCache.slice(-2000))).catch((err) => {
         console.error('[MessageStore] Redis save error:', err);
       });
     }

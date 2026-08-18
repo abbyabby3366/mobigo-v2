@@ -212,7 +212,10 @@ module Submitters
   # rubocop:enable Metrics
 
   def build_document_filename(submitter, blob, filename_format)
-    return blob.filename.to_s if filename_format.blank?
+    if filename_format.blank?
+      clean_doc_name = Submissions::GenerateResultAttachments.resolve_document_name(submitter, blob.filename.base)
+      return "#{clean_doc_name}.#{blob.filename.extension}"
+    end
 
     filename = filename_format.gsub('{document.name}', blob.filename.base)
     filename = ReplaceEmailVariables.call(filename, submitter:)

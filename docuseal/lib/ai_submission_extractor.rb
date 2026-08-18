@@ -325,10 +325,10 @@ module AiSubmissionExtractor
     'Month of Date' => 'Agreement Month (MM)',
     'Month of Agreement' => 'Agreement Month (MM)',
     'Bulan' => 'Month',
-    'Year of Date' => 'Agreement Year (YYYY)',
-    'Year Of Date' => 'Agreement Year (YYYY)',
-    'Year of Agreement' => 'Agreement Year (YYYY)',
-    'Tahun' => 'Year',
+    'Year of Date' => 'Agreement Year (YY)',
+    'Year Of Date' => 'Agreement Year (YY)',
+    'Year of Agreement' => 'Agreement Year (YY)',
+    'Tahun' => 'Year (YY)',
     'Date' => 'Agreement / Signing Date',
     'Tarikh' => 'Agreement / Signing Date',
     'Tarikh Penerimaan' => 'Receipt Date',
@@ -676,9 +676,9 @@ module AiSubmissionExtractor
     # 2. Month of Date (e.g. 01)
     elsif normalized =~ /\b(month\s+of\s+date|bulan)\b/i || (normalized =~ /\bmonth\b/i && normalized !~ /\b(day|year|rent)\b/i)
       now.strftime('%m')
-    # 3. Year of Date (e.g. 2026)
+    # 3. Year of Date (e.g. 26)
     elsif normalized =~ /\b(year\s+of\s+date|tahun)\b/i || (normalized =~ /\byear\b/i && normalized !~ /\b(day|month)\b/i)
-      now.strftime('%Y')
+      now.strftime('%y')
     # 4. Order Number (e.g. 2026012200)
     elsif normalized =~ /\b(pesanan|order)\b/i
       order_number.presence || DailyOrderSequence.next_order_number(account, date: now)

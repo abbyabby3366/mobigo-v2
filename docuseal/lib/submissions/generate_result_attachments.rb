@@ -104,9 +104,11 @@ module Submissions
             image_pdfs << pdf
           end
 
+          doc_name = resolve_document_name(submitter, item['name'])
+
           build_pdf_attachment(pdf:, submitter:, pkcs:, tsa_url:,
                                uuid: item['attachment_uuid'],
-                               name: item['name'])
+                               name: doc_name)
         end
 
       return ApplicationRecord.no_touching { result_attachments.map { |e| e.tap(&:save!) } } if image_pdfs.size < 2
@@ -803,8 +805,11 @@ module Submissions
         end
       end
 
+      clean_name = name.to_s.gsub(/\s*27062026/i, '').strip
+      clean_name = 'Phone Rental' if clean_name.blank?
+
       ActiveStorage::Attachment.new(
-        blob: ActiveStorage::Blob.create_and_upload!(io: io.tap(&:rewind), filename: "#{name}.pdf"),
+        blob: ActiveStorage::Blob.create_and_upload!(io: io.tap(&:rewind), filename: "#{clean_name}.pdf"),
         metadata: { original_uuid: uuid,
                     analyzed: true,
                     sha256: Base64.urlsafe_encode64(Digest::SHA256.digest(io.string)) },
@@ -813,6 +818,46 @@ module Submissions
       )
     end
     # rubocop:enable Metrics
+
+    def resolve_document_name(submitter, default_name = nil)
+      submission = submitter.submission
+      template = submission.template
+
+      # 1. Look for order number in submitter values or fields
+      order_number = nil
+      (submission.template_fields || template&.fields || []).each do |field|
+        next unless field['name'].to_s.downcase =~ /\b(pesanan|order)\b/i
+
+        val = submitter.values[field['uuid']] || submitter.values[field['name']]
+        if val.present?
+          order_number = val.to_s.strip
+          break
+        end
+      end
+
+      # 2. Look for branch name from submission name or submitter values
+      branch_name = nil
+      if submission.name.present? && submission.name =~ /\((.*?)\)/
+        branch_name = Regexp.last_match(1).to_s.strip
+      elsif submitter.values['branch_name'].present?
+        branch_name = submitter.values['branch_name'].to_s.strip
+      end
+
+      # 3. Determine base prefix
+      base_title = if template&.name.to_s.downcase.include?('ctos')
+                     'CTOS Consent Form'
+                   else
+                     'Phone Rental'
+                   end
+
+      # 4. Build format: Phone Rental {{order number}} ({{branch name}})
+      parts = [base_title]
+      parts << order_number if order_number.present?
+      result_title = parts.join(' ')
+      result_title = "#{result_title} (#{branch_name})" if branch_name.present?
+
+      result_title.presence || default_name.to_s.gsub(/\s*27062026/i, '').strip.presence || 'Phone Rental'
+    end
 
     def maybe_enable_ltv(io, _sign_params)
       io

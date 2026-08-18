@@ -35,9 +35,11 @@ module Submissions
         pdf.write(io, incremental: true, validate: true)
       end
 
+      doc_filename = Submissions::GenerateResultAttachments.resolve_document_name(submitter, submission.name || submission.template&.name)
+
       ActiveStorage::Attachment.create!(
         blob: ActiveStorage::Blob.create_and_upload!(
-          io: io.tap(&:rewind), filename: "#{submission.name || submission.template&.name}.pdf"
+          io: io.tap(&:rewind), filename: "#{doc_filename}.pdf"
         ),
         name: with_audit ? 'combined_document' : 'merged_document',
         record: submission

@@ -28,13 +28,37 @@ export interface CreateSubmissionParams {
 }
 
 export class DocuSealService {
-  private getApiUrl(): string {
-    const defaultUrl = process.env.DOCUSEAL_API_URL || (process.env.NODE_ENV === 'production' ? 'http://app:3000' : 'http://localhost:3000');
-    return defaultUrl.replace(/\/$/, '');
+  getApiUrl(): string {
+    const isProd = process.env.NODE_ENV === 'production' || process.env.APP_ENV === 'production';
+    if (isProd) {
+      return (process.env.PROD_DOCUSEAL_URL || process.env.MOBIGO_API_URL || process.env.DOCUSEAL_API_URL || 'https://mobigo.io7.my').replace(/\/+$/, '');
+    }
+    return (process.env.DEV_DOCUSEAL_URL || process.env.DOCUSEAL_API_URL || 'http://localhost:3000').replace(/\/+$/, '');
   }
 
-  private getApiKey(): string {
-    return process.env.DOCUSEAL_API_KEY || '9ewYoE91wx1p8hASHVMaoJBuvA4uP2vyU14WaPMGAe6';
+  getApiKey(): string {
+    const isProd = process.env.NODE_ENV === 'production' || process.env.APP_ENV === 'production';
+    if (isProd) {
+      return process.env.PROD_DOCUSEAL_API_KEY || process.env.MOBIGO_IO7_MY_API_KEY || process.env.DOCUSEAL_API_KEY || 'dwvP7HPoWiJsvcETWeLfR8K6NVf4a9vefLhiTydH5xk';
+    }
+    return process.env.DEV_DOCUSEAL_API_KEY || process.env.DOCUSEAL_API_KEY || '9ewYoE91wx1p8hASHVMaoJBuvA4uP2vyU14WaPMGAe6';
+  }
+
+  getPublicUrl(): string {
+    const isProd = process.env.NODE_ENV === 'production' || process.env.APP_ENV === 'production';
+    if (isProd) {
+      return (process.env.PROD_DOCUSEAL_URL || process.env.MOBIGO_API_URL || process.env.DOCUSEAL_PUBLIC_URL || 'https://mobigo.io7.my').replace(/\/+$/, '');
+    }
+    const local = process.env.DEV_DOCUSEAL_URL || process.env.DOCUSEAL_PUBLIC_URL || 'http://localhost:3000';
+    return local.replace('http://app:3000', 'http://localhost:3000').replace(/\/+$/, '');
+  }
+
+  getDefaultTemplateId(): number {
+    const isProd = process.env.NODE_ENV === 'production' || process.env.APP_ENV === 'production';
+    const id = isProd
+      ? (process.env.PROD_DEFAULT_TEMPLATE_ID || process.env.DOCUSEAL_DEFAULT_TEMPLATE_ID || 2)
+      : (process.env.DEV_DEFAULT_TEMPLATE_ID || process.env.DOCUSEAL_DEFAULT_TEMPLATE_ID || 2);
+    return Number(id) || 2;
   }
 
   private getHeaders() {
@@ -125,8 +149,8 @@ export class DocuSealService {
     const now = new Date();
     const day = String(now.getDate()).padStart(2, '0');
     const month = String(now.getMonth() + 1).padStart(2, '0');
-    const year = String(now.getFullYear());
-    const fullDate = `${day}/${month}/${year}`;
+    const yearYY = String(now.getFullYear()).slice(-2);
+    const fullDate = `${day}/${month}/${now.getFullYear()}`;
 
     const fieldsMap: Record<string, any> = {
       'Name': data.name || '',
@@ -143,7 +167,7 @@ export class DocuSealService {
       'Nombor Pesanan': data.order_number || '',
       'Day Of Date': day,
       'Month Of Date': month,
-      'Year of Date': year,
+      'Year of Date': yearYY,
       'Date': fullDate,
     };
 

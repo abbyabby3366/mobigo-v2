@@ -15,14 +15,19 @@ module Api
           build_preview_documents(@submission, merge: is_merge)
         end
 
-      ActiveRecord::Associations::Preloader.new(records: documents, associations: [:blob]).call
-
       expires_at = Accounts.link_expires_at(current_account)
+      submitter = @submission.submitters.where.not(completed_at: nil).order(:completed_at).last || @submission.submitters.first
+      clean_doc_name = if submitter
+                         Submissions::GenerateResultAttachments.resolve_document_name(submitter, @submission.name || @submission.template&.name)
+                       else
+                         (@submission.name.presence || @submission.template&.name.to_s).gsub(/\s*27062026/i, '').strip.presence || 'Phone Rental'
+                       end
 
       render json: {
         id: @submission.id,
         documents: documents.map do |attachment|
-          { name: attachment.filename.base, url: ActiveStorage::Blob.proxy_url(attachment.blob, expires_at:) }
+          doc_filename = "#{clean_doc_name}.#{attachment.blob.filename.extension}"
+          { name: clean_doc_name, url: ActiveStorage::Blob.proxy_url(attachment.blob, expires_at:, filename: doc_filename) }
         end
       }
     end

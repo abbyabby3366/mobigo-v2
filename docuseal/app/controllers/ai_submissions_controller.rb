@@ -170,7 +170,14 @@ class AiSubmissionsController < ApplicationController
     end
 
     branch_name = raw_sub[:branch_name] || raw_sub['branch_name'] || params[:branch_name] || params.dig(:submission, :branch_name) || normalized_submitters.first&.dig(:values, 'branch_name')
-    submission_name = branch_name.present? ? "#{template.name} (#{branch_name.to_s.strip})" : template.name
+    first_vals = normalized_submitters.first&.dig(:values) || normalized_submitters.first&.dig('values') || {}
+    order_number = first_vals['Nombor Pesanan'] || first_vals['order_number'] || first_vals['No. Pesanan']
+
+    base_title = template.name.to_s.downcase.include?('ctos') ? 'CTOS Consent Form' : 'Phone Rental'
+    parts = [base_title]
+    parts << order_number.to_s.strip if order_number.present?
+    submission_name = parts.join(' ')
+    submission_name = "#{submission_name} (#{branch_name.to_s.strip})" if branch_name.present?
 
     submissions_attrs = [{ name: submission_name, 'name' => submission_name, submitters: normalized_submitters, 'submitters' => normalized_submitters }]
 

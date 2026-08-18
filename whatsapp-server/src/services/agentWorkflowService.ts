@@ -1,5 +1,5 @@
 import { BufferJSON } from 'baileys';
-import { getRedisClient } from './redisAuthState.js';
+import { getRedisClient, formatRedisKey } from './redisAuthState.js';
 import { MobigoAiService, ExtractedDocumentData, BufferedFile } from './mobigoAiService.js';
 import { docusealService } from './docusealService.js';
 import { sendTextMessage } from './baileysManager.js';
@@ -36,7 +36,7 @@ export class AgentWorkflowService {
     const redis = getRedisClient();
     if (redis) {
       try {
-        const keys = await redis.keys('wa_agent_wf:*');
+        const keys = await redis.keys(formatRedisKey('wa_agent_wf:*'));
         for (const key of keys) {
           const raw = await redis.get(key);
           if (raw) {
@@ -85,7 +85,7 @@ export class AgentWorkflowService {
     const redis = getRedisClient();
     if (redis) {
       try {
-        await redis.set(`wa_agent_wf:${session.chatJid}`, JSON.stringify(session, BufferJSON.replacer), 'EX', 86400 * 7); // 7 days TTL
+        await redis.set(formatRedisKey(`wa_agent_wf:${session.chatJid}`), JSON.stringify(session, BufferJSON.replacer), 'EX', 86400 * 7); // 7 days TTL
       } catch (_) {}
     }
   }
@@ -101,7 +101,7 @@ export class AgentWorkflowService {
     const redis = getRedisClient();
     if (redis) {
       try {
-        await redis.del(`wa_agent_wf:${chatJid}`);
+        await redis.del(formatRedisKey(`wa_agent_wf:${chatJid}`));
       } catch (_) {}
     }
   }
@@ -673,8 +673,10 @@ export class AgentWorkflowService {
       const submitters = docusealService.buildSubmittersPayload(d);
 
       const branchName = d.branch_name ? d.branch_name.trim() : '';
-      let baseDocName = session.selectedTemplateId === 5 ? 'CTOS CBM Consent Form' : 'Phone Rental Service';
-      const submissionName = branchName ? `${baseDocName} (${branchName})` : baseDocName;
+      const orderNum = d.order_number ? d.order_number.trim() : '';
+      let baseDocName = session.selectedTemplateId === 5 ? 'CTOS Consent Form' : 'Phone Rental';
+      let submissionName = orderNum ? `${baseDocName} ${orderNum}` : baseDocName;
+      if (branchName) submissionName += ` (${branchName})`;
 
       const submissionRes = await docusealService.createSubmission({
         template_id: templateId,

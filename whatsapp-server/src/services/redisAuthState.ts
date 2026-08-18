@@ -13,6 +13,21 @@ import path from 'path';
 let redisClient: Redis | null = null;
 const SESSIONS_DIR = process.env.SESSIONS_DIR || './sessions';
 
+export function getEnvPrefix(): string {
+  const env = (process.env.NODE_ENV || 'development').toLowerCase();
+  return env === 'production' ? 'prod' : 'dev';
+}
+
+export function getAuthVersion(): string {
+  return process.env.REDIS_AUTH_VERSION || 'v1';
+}
+
+export function formatRedisKey(key: string): string {
+  const prefix = getEnvPrefix();
+  const authVer = getAuthVersion();
+  return `${prefix}:${authVer}:${key}`;
+}
+
 export function getRedisClient(): Redis | null {
   if (redisClient) return redisClient;
 
@@ -33,7 +48,7 @@ export function getRedisClient(): Redis | null {
     });
 
     redisClient.on('error', (err) => console.error('[Redis] Client Error:', err.message));
-    redisClient.on('connect', () => console.log('[Redis] Connected successfully.'));
+    redisClient.on('connect', () => console.log(`[Redis] Connected successfully (Env: ${getEnvPrefix()}).`));
 
     return redisClient;
   } catch (err) {
@@ -55,8 +70,8 @@ export async function useRedisAuthState(sessionId: string): Promise<{
   const credsFile = path.join(sessionLocalDir, 'creds.json');
   const redis = getRedisClient();
 
-  const credsKey = `wa_session:${sessionId}:creds`;
-  const keysPrefix = `wa_session:${sessionId}:keys:`;
+  const credsKey = formatRedisKey(`wa_session:${sessionId}:creds`);
+  const keysPrefix = formatRedisKey(`wa_session:${sessionId}:keys:`);
 
   const readData = async (key: string, localFileName?: string) => {
     if (redis) {
@@ -152,7 +167,7 @@ export async function useRedisAuthState(sessionId: string): Promise<{
 
       if (redis) {
         try {
-          const keys = await redis.keys(`wa_session:${sessionId}:*`);
+          const keys = await redis.keys(formatRedisKey(`wa_session:${sessionId}:*`));
           if (keys.length > 0) {
             await redis.del(...keys);
           }

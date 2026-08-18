@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { docusealService } from './docusealService.js';
 
 export interface ExtractedDocumentData {
   name?: string;
@@ -34,10 +35,10 @@ export class MobigoAiService {
   static async extractContractData(
     textNotes: string[],
     files: BufferedFile[],
-    templateId: number = 3
+    templateId: number = 2
   ): Promise<ExtractedDocumentData> {
-    const baseUrl = (process.env.DOCUSEAL_API_URL || process.env.MOBIGO_API_URL || 'http://app:3000').replace(/\/+$/, '');
-    const apiKey = process.env.DOCUSEAL_API_KEY || process.env.MOBIGO_IO7_MY_API_KEY || '';
+    const baseUrl = docusealService.getApiUrl();
+    const apiKey = docusealService.getApiKey();
 
     const formData = new FormData();
     formData.append('template_id', String(templateId));
