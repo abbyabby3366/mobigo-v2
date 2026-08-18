@@ -25,6 +25,35 @@ export interface ChatSessionWorkflow {
   updatedAt: string;
 }
 
+export interface TemplateOption {
+  id: number;
+  name: string;
+  shortName: string;
+  description: string;
+  keywords?: string[];
+}
+
+export const TEMPLATE_OPTIONS: TemplateOption[] = [
+  {
+    id: 3,
+    name: 'Phone Rental Service Template',
+    shortName: 'Phone Rental',
+    description: 'Phone Rental Agreement, Device Details & Fees',
+    keywords: ['phone', 'rental', 'agreement', 'device'],
+  },
+  {
+    id: 5,
+    name: 'CTOS CBM - Consent Form',
+    shortName: 'CTOS Consent Form',
+    description: 'Credit Check Consent Form',
+    keywords: ['ctos', 'cbm', 'consent'],
+  },
+];
+
+export function getTemplateOption(id: number): TemplateOption | undefined {
+  return TEMPLATE_OPTIONS.find((t) => t.id === id);
+}
+
 // In-Memory map for lightning fast access + Redis persistent backup
 const workflowSessions = new Map<string, ChatSessionWorkflow>();
 
@@ -186,22 +215,30 @@ export class AgentWorkflowService {
 
     // 6. Template selection (if awaiting template selection)
     if (session.state === AgentChatState.AWAITING_TEMPLATE_SELECTION) {
-      if (lower === '1' || lower.includes('phone') || lower.includes('rental') || lower.includes('agreement')) {
-        session.selectedTemplateId = 2;
+      const choiceIndex = parseInt(trimmed, 10);
+      if (!isNaN(choiceIndex) && choiceIndex >= 1 && choiceIndex <= TEMPLATE_OPTIONS.length) {
+        session.selectedTemplateId = TEMPLATE_OPTIONS[choiceIndex - 1].id;
         await this.executeAiExtraction(sessionId, session);
-        return true;
-      } else if (lower === '2' || lower.includes('ctos') || lower.includes('consent') || lower.includes('cbm')) {
-        session.selectedTemplateId = 5;
-        await this.executeAiExtraction(sessionId, session);
-        return true;
-      } else {
-        await sendTextMessage(
-          sessionId,
-          chatJid,
-          `⚠️ *Invalid Selection*\n\nPlease reply with *1* for *Phone Rental Service Template* or *2* for *CTOS CBM - Consent Form*.`
-        );
         return true;
       }
+
+      // Keyword fallback (e.g. user typed "ctos" or "phone rental")
+      const matched = TEMPLATE_OPTIONS.find(
+        (t) => t.keywords?.some((k) => lower.includes(k)) || lower.includes(t.name.toLowerCase())
+      );
+      if (matched) {
+        session.selectedTemplateId = matched.id;
+        await this.executeAiExtraction(sessionId, session);
+        return true;
+      }
+
+      const validOptions = TEMPLATE_OPTIONS.map((t, i) => `*${i + 1}* for *${t.name}*`).join(' or ');
+      await sendTextMessage(
+        sessionId,
+        chatJid,
+        `⚠️ *Invalid Selection*\n\nPlease reply with ${validOptions}.`
+      );
+      return true;
     }
 
     // 7. Proceed / Submit command
@@ -369,16 +406,21 @@ export class AgentWorkflowService {
       return;
     }
 
-    // If agent directly passed template ID (e.g. "/ai 1" or "/ai 2")
+    // If agent directly passed template option (e.g. "/ai 1" or "/ai 2") or keyword
     const parts = rawText.split(/\s+/);
     if (parts.length > 1) {
-      const opt = parts[1].toLowerCase();
-      if (opt === '1' || opt.includes('phone') || opt.includes('rental')) {
-        session.selectedTemplateId = 3;
+      const opt = parts[1].trim().toLowerCase();
+      const choiceIndex = parseInt(opt, 10);
+      if (!isNaN(choiceIndex) && choiceIndex >= 1 && choiceIndex <= TEMPLATE_OPTIONS.length) {
+        session.selectedTemplateId = TEMPLATE_OPTIONS[choiceIndex - 1].id;
         await this.executeAiExtraction(sessionId, session);
         return;
-      } else if (opt === '2' || opt.includes('ctos') || opt.includes('consent')) {
-        session.selectedTemplateId = 5;
+      }
+      const matched = TEMPLATE_OPTIONS.find(
+        (t) => t.keywords?.some((k) => opt.includes(k)) || opt.includes(t.name.toLowerCase())
+      );
+      if (matched) {
+        session.selectedTemplateId = matched.id;
         await this.executeAiExtraction(sessionId, session);
         return;
       }
@@ -388,15 +430,16 @@ export class AgentWorkflowService {
     session.state = AgentChatState.AWAITING_TEMPLATE_SELECTION;
     await this.saveSession(session);
 
+    const templateOptionsText = TEMPLATE_OPTIONS.map(
+      (t, idx) => `${idx + 1}️⃣ *${t.name}* _(ID: ${t.id})_`
+    ).join('\n');
+
     const templatePrompt =
       `📑 *Which template should I use?*\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `1️⃣ *Phone Rental Service Template*\n` +
-      `   • Phone Rental Agreement, Device Details & Fees\n\n` +
-      `2️⃣ *CTOS CBM - Consent Form*\n` +
-      `   • Credit Check Consent Form\n` +
+      `${templateOptionsText}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-      `👉 *Answer 1 or 2 to select the template.*`;
+      `👉 *Reply ${TEMPLATE_OPTIONS.map((_, i) => i + 1).join(' or ')} to select the template.*`;
 
     await sendTextMessage(sessionId, session.chatJid, templatePrompt);
   }
@@ -405,9 +448,8 @@ export class AgentWorkflowService {
    * Execute AI Extraction for the Selected Template
    */
   private static async executeAiExtraction(sessionId: string, session: ChatSessionWorkflow): Promise<void> {
-    const templateName = session.selectedTemplateId === 5
-      ? 'CTOS CBM - Consent Form'
-      : 'Phone Rental Service Template';
+    const tpl = getTemplateOption(session.selectedTemplateId) || TEMPLATE_OPTIONS[0];
+    const templateName = tpl.name;
 
     await sendTextMessage(
       sessionId,
@@ -469,7 +511,7 @@ export class AgentWorkflowService {
       // Template 5: CTOS CBM Consent Form
       const reviewMsg =
         `📋 *Mobigo Contract Draft Details*\n` +
-        `📑 *Template:* CTOS CBM - Consent Form\n` +
+        `📑 *Template:* CTOS CBM - Consent Form (ID: 5)\n` +
         `━━━━━━━━━━━━━━━━━━━━━━━\n` +
         `👤 *1. RECIPIENT & DELIVERY INFO*\n` +
         `1. *Recipient Name:* ${d.name || '_(Missing)_'}\n` +
@@ -478,21 +520,22 @@ export class AgentWorkflowService {
         `📄 *2. CONSENT & IC DETAILS*\n` +
         `4. *No. Kad Pengenalan:* ${d.ic_number || '_(Missing)_'}\n` +
         `5. *Tarikh Borang:* ${currentDate}\n` +
+        `6. *Cawangan / Branch:* ${d.branch_name || '_(None / Optional)_'}\n` +
         `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
         `✍️ *To edit any field:* Reply with number and value:\n` +
         `_Example:_ *2 customer@email.com*\n` +
-        `_Example:_ *4 890425-02-5957*\n\n` +
+        `_Example:_ *4 890425-02-5957*\n` +
+        `_Example:_ *6 Sunway Pyramid*\n\n` +
         `👉 Send */proceed* to create DocuSeal signing link!`;
 
       await sendTextMessage(sessionId, session.chatJid, reviewMsg);
       return;
     }
 
-    // Default: Template 2 (Phone Rental Service Template)
-    const branchLine = d.branch_name ? `🏢 *Cawangan / Branch:* ${d.branch_name}\n` : '';
+    // Default: Template 3 (Phone Rental Service Template)
     const reviewMsg =
       `📋 *Mobigo Contract Draft Details*\n` +
-      `📑 *Template:* Phone Rental Service Template\n` +
+      `📑 *Template:* Phone Rental Service Template (ID: 3)\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `👤 *1. RECIPIENT & DELIVERY INFO (First Party)*\n` +
       `1. *Recipient Name:* ${d.name || '_(Missing)_'}\n` +
@@ -509,7 +552,7 @@ export class AgentWorkflowService {
       `11. *Harga Produk:* ${d.product_price || '-'}\n` +
       `12. *Nombor Pesanan:* ${d.order_number || '-'}\n` +
       `13. *Tarikh Perjanjian:* ${currentDate}\n` +
-      branchLine +
+      `14. *Cawangan / Branch:* ${d.branch_name || '_(None / Optional)_'}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
       `✍️ *To edit any field:* Reply with number and value:\n` +
       `_Example:_ *2 customer@email.com*\n` +
@@ -517,7 +560,7 @@ export class AgentWorkflowService {
       `_Example:_ *5 No 12 Jalan Merdeka, KL*\n` +
       `_Example:_ *7 IMEI1: 354704736663104 / IMEI2: 354704736663112*\n` +
       `_Example:_ *8 RM 150*\n` +
-      `_Example:_ *branch: ABC Holdings*\n\n` +
+      `_Example:_ *14 Sunway Pyramid*\n\n` +
       `👉 Send */proceed* to create DocuSeal signing link!`;
 
     await sendTextMessage(sessionId, session.chatJid, reviewMsg);
@@ -550,6 +593,7 @@ export class AgentWorkflowService {
           case 2: d.email = val; break;
           case 3: d.phone_number = val; break;
           case 4: d.ic_number = val; break;
+          case 6: d.branch_name = val; break;
           default: return false;
         }
       } else {
@@ -573,6 +617,7 @@ export class AgentWorkflowService {
           case 10: d.deposit = val; break;
           case 11: d.product_price = val; break;
           case 12: d.order_number = val; break;
+          case 14: d.branch_name = val; break;
           default: return false;
         }
       }
@@ -669,12 +714,13 @@ export class AgentWorkflowService {
     );
 
     try {
-      const templateId = session.selectedTemplateId || 2;
+      const templateId = session.selectedTemplateId || 3;
       const submitters = docusealService.buildSubmittersPayload(d);
 
       const branchName = d.branch_name ? d.branch_name.trim() : '';
       const orderNum = d.order_number ? d.order_number.trim() : '';
-      let baseDocName = session.selectedTemplateId === 5 ? 'CTOS Consent Form' : 'Phone Rental';
+      const tpl = getTemplateOption(session.selectedTemplateId) || TEMPLATE_OPTIONS[0];
+      const baseDocName = tpl.shortName;
       let submissionName = orderNum ? `${baseDocName} ${orderNum}` : baseDocName;
       if (branchName) submissionName += ` (${branchName})`;
 
@@ -707,9 +753,7 @@ export class AgentWorkflowService {
         signingUrl = `${publicBase}/submissions/${subId}`;
       }
 
-      const templateName = session.selectedTemplateId === 5
-        ? 'CTOS CBM - Consent Form'
-        : 'Phone Rental Service Template';
+      const templateName = tpl.name;
 
       const successMsg =
         `🎉 *DocuSeal Submission Created!* 🎉\n` +

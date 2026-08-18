@@ -33,7 +33,7 @@ export class DocuSealService {
     if (isProd) {
       return (process.env.PROD_DOCUSEAL_URL || process.env.MOBIGO_API_URL || process.env.DOCUSEAL_API_URL || 'https://mobigo.io7.my').replace(/\/+$/, '');
     }
-    return (process.env.DEV_DOCUSEAL_URL || process.env.DOCUSEAL_API_URL || 'http://localhost:3000').replace(/\/+$/, '');
+    return (process.env.DOCUSEAL_API_URL || process.env.DEV_DOCUSEAL_URL || 'http://localhost:3000').replace(/\/+$/, '');
   }
 
   getApiKey(): string {

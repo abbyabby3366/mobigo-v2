@@ -287,7 +287,8 @@ export function renderDashboardHtml(): string {
                 Actions
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
               </button>
-              <div id="actionsDropdown" class="hidden absolute right-0 mt-1 w-44 bg-white rounded-lg shadow-lg border border-slate-200 py-1 text-xs z-20">
+              <div id="actionsDropdown" class="hidden absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-1 text-xs z-20">
+                <a id="modalChatWithSessionLink" href="#" target="_blank" class="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-emerald-700 font-semibold">💬 Chat with Session</a>
                 <button onclick="openQrFromModal()" class="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-slate-700">📷 Scan QR Code</button>
                 <button onclick="reconnectFromModal()" class="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-blue-600 font-medium">🔄 Reconnect</button>
                 <button onclick="logoutFromModal()" class="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-amber-600 font-medium">🚪 Logout</button>
@@ -480,9 +481,22 @@ export function renderDashboardHtml(): string {
                 </div>
               </div>
             </div>
-            <div class="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100">
-              <button onclick="openManageModal('\${s.session_id}')" class="flex-1 h-8 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs shadow-xs transition">Manage Session</button>
-              <button onclick="openQrModal('\${s.session_id}')" class="h-8 px-3 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium text-xs">📷 Scan</button>
+            <div class="space-y-2 mt-4 pt-3 border-t border-slate-100">
+              <div class="flex items-center gap-2">
+                <button onclick="openManageModal('\${s.session_id}')" class="flex-1 h-8 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs shadow-xs transition">Manage Session</button>
+                <button onclick="openQrModal('\${s.session_id}')" class="h-8 px-3 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium text-xs flex items-center gap-1">📷 Scan</button>
+              </div>
+              \${s.phone_number ? \`
+                <a href="https://wa.me/\${s.phone_number.replace(/[^0-9]/g, '')}" target="_blank" class="w-full h-8 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-semibold text-xs flex items-center justify-center gap-1.5 transition shadow-2xs">
+                  <span>💬 Chat with Session</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
+                </a>
+              \` : \`
+                <button disabled class="w-full h-8 rounded-lg bg-slate-50 border border-slate-200 text-slate-400 font-medium text-xs flex items-center justify-center gap-1.5 cursor-not-allowed">
+                  <span>💬 Chat with Session</span>
+                  <span class="text-[10px] text-slate-400 font-normal">(Not connected)</span>
+                </button>
+              \`}
             </div>
           </div>
         \`;
@@ -729,6 +743,17 @@ export function renderDashboardHtml(): string {
       document.getElementById('settingAlias').value = currentSession.alias || '';
       document.getElementById('settingLabels').value = (currentSession.labels || []).join(', ');
       
+      const chatLink = document.getElementById('modalChatWithSessionLink');
+      if (chatLink) {
+        if (currentSession.phone_number) {
+          chatLink.href = 'https://wa.me/' + currentSession.phone_number.replace(/[^0-9]/g, '');
+          chatLink.classList.remove('opacity-40', 'pointer-events-none');
+        } else {
+          chatLink.href = '#';
+          chatLink.classList.add('opacity-40', 'pointer-events-none');
+        }
+      }
+
       renderAgentsList(currentSession.agent_phone_numbers || []);
       switchTab('settings');
       document.getElementById('manageModal').classList.remove('hidden');
