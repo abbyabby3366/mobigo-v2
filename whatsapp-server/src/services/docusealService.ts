@@ -11,6 +11,7 @@ export interface DocuSealSubmitter {
 }
 
 export interface CreateSubmissionParams {
+  name?: string;
   template_id?: number | string;
   send_email?: boolean;
   send_sms?: boolean;

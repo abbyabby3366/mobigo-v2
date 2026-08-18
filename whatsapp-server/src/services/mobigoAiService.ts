@@ -13,6 +13,7 @@ export interface ExtractedDocumentData {
   deposit?: string;
   product_price?: string;
   order_number?: string;
+  branch_name?: string;
   [key: string]: any;
 }
 
@@ -109,6 +110,27 @@ export class MobigoAiService {
     const productPrice = values['Harga Produk'] || values['product_price'] || '';
     const orderNum = values['Nombor Pesanan'] || values['order_number'] || '';
 
+    // Extract branch name (raw field) - check AI fields and text notes fallback
+    let branchName =
+      values['branch_name'] ||
+      values['Branch Name'] ||
+      values['Branch'] ||
+      values['branch'] ||
+      values['Cawangan'] ||
+      values['cawangan'] ||
+      values['Nama Cawangan'] ||
+      values['nama_cawangan'] ||
+      '';
+
+    if (!branchName && textNotes.length > 0) {
+      const fullText = textNotes.join('\n');
+      const branchRegex = /(?:branch(?:\s*name)?|cawangan(?:\s*name)?|nama\s*cawangan)\s*[:=\-]\s*([^\r\n,]+)/i;
+      const match = fullText.match(branchRegex);
+      if (match && match[1]) {
+        branchName = match[1].trim();
+      }
+    }
+
     return {
       name: nameVal,
       email: emailVal,
@@ -122,6 +144,7 @@ export class MobigoAiService {
       deposit: deposit,
       product_price: productPrice,
       order_number: orderNum,
+      branch_name: branchName,
       ...values,
     };
   }

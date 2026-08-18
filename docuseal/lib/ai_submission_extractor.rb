@@ -93,6 +93,7 @@ module AiSubmissionExtractor
          - Phone Number ("Nombor Telefon", "No. Tel", "Mobile"): Extract from WhatsApp/order text (e.g. 01153565717).
          - Email Address ("E-mel", "Email"): Extract from WhatsApp/order text (e.g. mohdfaiz5957@gmail.com).
          - Address ("Alamat", "Alamat Penghantaran", "Address"): Extract full residential or delivery address from MyKad or text notes.
+         - Branch / Cawangan Name ("branch_name", "Branch Name", "branch", "Cawangan", "cawangan", "Nama Cawangan"): Extract branch name from notes or text if provided (e.g. "branch name: ABC Holdings" -> "ABC Holdings"). Put in fields["branch_name"].
 
       2. Device & Product Information:
          - Product Name / Model ("Nama Produk", "Model", "Device Model"): Extract phone model and capacity from text or box image (e.g. "iPhone 17 Pro Max 256GB" or "iPhone 17 Pro Max, 512GB").
@@ -138,6 +139,7 @@ module AiSubmissionExtractor
         ],
         "fields": {
           "period": "<extracted raw period, e.g. '13Period' or '13'>",
+          "branch_name": "<extracted branch name or empty, e.g. 'ABC Holdings'>",
           "imei1": "<extracted 15-digit IMEI 1>",
           "imei2": "<extracted 15-digit IMEI 2 or empty>",
           "<raw_field_name>": "<extracted raw value>"
@@ -862,6 +864,16 @@ module AiSubmissionExtractor
     if raw_imei2.present?
       fields_hash['imei2'] = raw_imei2
       english_fields['imei2'] = raw_imei2
+    end
+
+    # Explicitly capture branch_name from root fields, AI fields, or regex scan
+    raw_branch_name = raw_fields['branch_name'] || raw_fields['Branch Name'] || raw_fields['branch'] || raw_fields['cawangan'] || raw_fields['nama_cawangan']
+    if raw_branch_name.blank? && content =~ /(?:branch(?:\s*name)?|cawangan(?:\s*name)?|nama\s*cawangan)\s*[:=\-]\s*([^\r\n,]+)/i
+      raw_branch_name = Regexp.last_match(1).to_s.strip
+    end
+    if raw_branch_name.present?
+      fields_hash['branch_name'] = raw_branch_name
+      english_fields['branch_name'] = raw_branch_name
     end
 
     # Explicitly capture calculator_period from root response or regex scan

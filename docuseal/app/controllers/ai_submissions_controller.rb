@@ -169,7 +169,10 @@ class AiSubmissionsController < ApplicationController
       }
     end
 
-    submissions_attrs = [{ submitters: normalized_submitters, 'submitters' => normalized_submitters }]
+    branch_name = raw_sub[:branch_name] || raw_sub['branch_name'] || params[:branch_name] || params.dig(:submission, :branch_name) || normalized_submitters.first&.dig(:values, 'branch_name')
+    submission_name = branch_name.present? ? "#{template.name} (#{branch_name.to_s.strip})" : template.name
+
+    submissions_attrs = [{ name: submission_name, 'name' => submission_name, submitters: normalized_submitters, 'submitters' => normalized_submitters }]
 
     submissions_attrs, _, new_fields =
       Submissions::NormalizeParamUtils.normalize_submissions_params!(submissions_attrs, template, add_fields: true)

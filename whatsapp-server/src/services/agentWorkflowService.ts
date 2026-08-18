@@ -187,7 +187,7 @@ export class AgentWorkflowService {
     // 6. Template selection (if awaiting template selection)
     if (session.state === AgentChatState.AWAITING_TEMPLATE_SELECTION) {
       if (lower === '1' || lower.includes('phone') || lower.includes('rental') || lower.includes('agreement')) {
-        session.selectedTemplateId = 3;
+        session.selectedTemplateId = 2;
         await this.executeAiExtraction(sessionId, session);
         return true;
       } else if (lower === '2' || lower.includes('ctos') || lower.includes('consent') || lower.includes('cbm')) {
@@ -416,7 +416,7 @@ export class AgentWorkflowService {
     );
 
     try {
-      const templateId = session.selectedTemplateId || 3;
+      const templateId = session.selectedTemplateId || 2;
       const extracted = await MobigoAiService.extractContractData(session.textNotes, session.bufferedFiles, templateId);
 
       // Smart Defaults for missing contract values
@@ -488,7 +488,8 @@ export class AgentWorkflowService {
       return;
     }
 
-    // Default: Template 3 (Phone Rental Service Template)
+    // Default: Template 2 (Phone Rental Service Template)
+    const branchLine = d.branch_name ? `🏢 *Cawangan / Branch:* ${d.branch_name}\n` : '';
     const reviewMsg =
       `📋 *Mobigo Contract Draft Details*\n` +
       `📑 *Template:* Phone Rental Service Template\n` +
@@ -508,13 +509,15 @@ export class AgentWorkflowService {
       `11. *Harga Produk:* ${d.product_price || '-'}\n` +
       `12. *Nombor Pesanan:* ${d.order_number || '-'}\n` +
       `13. *Tarikh Perjanjian:* ${currentDate}\n` +
+      branchLine +
       `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
       `✍️ *To edit any field:* Reply with number and value:\n` +
       `_Example:_ *2 customer@email.com*\n` +
       `_Example:_ *3 01153565717*\n` +
       `_Example:_ *5 No 12 Jalan Merdeka, KL*\n` +
       `_Example:_ *7 IMEI1: 354704736663104 / IMEI2: 354704736663112*\n` +
-      `_Example:_ *8 RM 150*\n\n` +
+      `_Example:_ *8 RM 150*\n` +
+      `_Example:_ *branch: ABC Holdings*\n\n` +
       `👉 Send */proceed* to create DocuSeal signing link!`;
 
     await sendTextMessage(sessionId, session.chatJid, reviewMsg);
@@ -583,8 +586,8 @@ export class AgentWorkflowService {
       return true;
     }
 
-    // Pattern 2: Key-value e.g. "name: Ahmad" or "email: test@gmail.com"
-    const kvMatch = text.match(/^(name|nama|email|emel|phone|telefon|hp|ic|kad|alamat|address|product|produk|imei|deposit|sewa|rent|order|pesanan)[\s:=]+(.+)$/i);
+    // Pattern 2: Key-value e.g. "name: Ahmad", "email: test@gmail.com", "branch: ABC Holdings"
+    const kvMatch = text.match(/^(name|nama|email|emel|phone|telefon|hp|ic|kad|alamat|address|product|produk|imei|deposit|sewa|rent|order|pesanan|branch|cawangan)[\s:=]+(.+)$/i);
     if (kvMatch) {
       const key = kvMatch[1].toLowerCase();
       let val = kvMatch[2].trim();
@@ -601,6 +604,7 @@ export class AgentWorkflowService {
         d.monthly_rent = val.toUpperCase().includes('RM') ? val : `RM ${val}`;
       }
       else if (key.includes('order') || key.includes('pesanan')) d.order_number = val;
+      else if (key.includes('branch') || key.includes('cawangan')) d.branch_name = val;
 
       session.extractedData = d;
       session.state = AgentChatState.REVIEWING;
@@ -665,11 +669,16 @@ export class AgentWorkflowService {
     );
 
     try {
-      const templateId = session.selectedTemplateId || 3;
+      const templateId = session.selectedTemplateId || 2;
       const submitters = docusealService.buildSubmittersPayload(d);
+
+      const branchName = d.branch_name ? d.branch_name.trim() : '';
+      let baseDocName = session.selectedTemplateId === 5 ? 'CTOS CBM Consent Form' : 'Phone Rental Service';
+      const submissionName = branchName ? `${baseDocName} (${branchName})` : baseDocName;
 
       const submissionRes = await docusealService.createSubmission({
         template_id: templateId,
+        name: submissionName,
         send_email: false,
         send_sms: false,
         submitters,

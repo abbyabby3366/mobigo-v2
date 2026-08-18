@@ -1,4 +1,13 @@
 export function renderDashboardHtml(): string {
+  const mobigoUrl = (process.env.MOBIGO_API_URL || process.env.DOCUSEAL_PUBLIC_URL || process.env.DOCUSEAL_URL || 'https://mobigo.io7.my').replace(/\/$/, '');
+  let urlLabel = 'mobigo.io7.my';
+  try {
+    const parsed = new URL(mobigoUrl);
+    urlLabel = parsed.port ? parsed.port : (parsed.hostname || 'mobigo.io7.my');
+  } catch {
+    urlLabel = 'mobigo.io7.my';
+  }
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -77,8 +86,8 @@ export function renderDashboardHtml(): string {
           <span class="text-emerald-400 font-medium">Synced</span>
         </div>
       </div>
-      <a href="http://localhost:3000" target="_blank" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition">
-        <span>Open DocuSeal (3000)</span>
+      <a href="${mobigoUrl}" target="_blank" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition">
+        <span>Open DocuSeal (${urlLabel})</span>
         <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
       </a>
     </div>

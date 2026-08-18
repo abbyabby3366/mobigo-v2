@@ -18,7 +18,9 @@ router.post('/docuseal', async (req: Request, res: Response) => {
     const submitter = data.submitters?.[0] || data.submitter;
     const phone = submitter?.phone || data.phone;
     const documentUrl = data.documents?.[0]?.url || data.document_url || data.pdf_url;
-    const documentName = data.documents?.[0]?.name || 'Completed_Document.pdf';
+    let documentName = data.name ? `${data.name}.pdf` : (data.documents?.[0]?.name || 'Completed_Document.pdf');
+    if (!documentName.endsWith('.pdf')) documentName += '.pdf';
+    documentName = documentName.replace(/\s*27062026/g, '');
 
     if (phone) {
       const sessionId = DEFAULT_SESSION_ID;
