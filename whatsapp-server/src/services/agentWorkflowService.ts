@@ -675,28 +675,35 @@ export class AgentWorkflowService {
         submitters,
       });
 
-      const submissionData = Array.isArray(submissionRes) ? submissionRes[0] : submissionRes;
-      const subId = submissionData.id || submissionData.submission_id || 'OK';
+      const firstSubmitter = Array.isArray(submissionRes)
+        ? submissionRes[0]
+        : (submissionRes.submitters?.[0] || submissionRes);
 
-      // Extract signing link
-      const docusealBase = process.env.DOCUSEAL_PUBLIC_URL || 'http://localhost:3000';
+      const slug = firstSubmitter?.slug;
+      const subId = firstSubmitter?.submission_id || firstSubmitter?.id || 'OK';
+
+      // Determine public base URL for browser-accessible signing link
+      const publicBase = (process.env.DOCUSEAL_PUBLIC_URL || process.env.MOBIGO_API_URL || 'http://localhost:3000')
+        .replace(/\/+$/, '')
+        .replace('http://app:3000', 'http://localhost:3000');
+
       let signingUrl = '';
-
-      if (submissionData.submitters && submissionData.submitters.length > 0) {
-        const slug = submissionData.submitters[0].slug;
-        if (slug) {
-          signingUrl = `${docusealBase}/s/${slug}`;
-        }
+      if (slug) {
+        signingUrl = `${publicBase}/s/${slug}`;
+      } else if (firstSubmitter?.embed_src) {
+        signingUrl = firstSubmitter.embed_src;
+      } else {
+        signingUrl = `${publicBase}/submissions/${subId}`;
       }
 
-      if (!signingUrl) {
-        signingUrl = `${docusealBase}/submissions/${subId}`;
-      }
+      const templateName = session.selectedTemplateId === 5
+        ? 'CTOS CBM - Consent Form'
+        : 'Phone Rental Service Template';
 
       const successMsg =
         `🎉 *DocuSeal Submission Created!* 🎉\n` +
         `━━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `📄 *Template:* Phone Rental Service Template\n` +
+        `📄 *Template:* ${templateName}\n` +
         `👤 *Customer:* ${d.name}\n` +
         `📬 *Email:* ${d.email}\n` +
         `📱 *Phone:* ${d.phone_number}\n` +
@@ -704,7 +711,8 @@ export class AgentWorkflowService {
         `✍️ *Customer Signing Link:*\n` +
         `👉 ${signingUrl}\n` +
         `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-        `_You can forward this signing link to the customer._\n` +
+        `_You can forward this signing link to the customer._\n\n` +
+        `⚠️ _Note: Submission has been created and cannot be edited. If any info is wrong, please redo a new submission._\n\n` +
         `Send */start* to create another document.`;
 
       await sendTextMessage(sessionId, session.chatJid, successMsg);
