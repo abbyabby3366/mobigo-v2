@@ -53,14 +53,6 @@ export class DocuSealService {
     return local.replace('http://app:3000', 'http://localhost:3000').replace(/\/+$/, '');
   }
 
-  getDefaultTemplateId(): number {
-    const isProd = process.env.NODE_ENV === 'production' || process.env.APP_ENV === 'production';
-    const id = isProd
-      ? (process.env.PROD_DEFAULT_TEMPLATE_ID || process.env.DOCUSEAL_DEFAULT_TEMPLATE_ID || 2)
-      : (process.env.DEV_DEFAULT_TEMPLATE_ID || process.env.DOCUSEAL_DEFAULT_TEMPLATE_ID || 2);
-    return Number(id) || 2;
-  }
-
   private getHeaders() {
     return {
       'X-Auth-Token': this.getApiKey(),
@@ -83,14 +75,19 @@ export class DocuSealService {
       // Fallback without /api if DocuSeal root routing differs
       if (err.response?.status === 404) {
         const altUrl = `${this.getApiUrl()}/submissions`;
-        const altRes = await axios.post(altUrl, params, {
-          headers: this.getHeaders(),
-          timeout: 30000,
-        });
-        return altRes.data;
+        try {
+          const altRes = await axios.post(altUrl, params, {
+            headers: this.getHeaders(),
+            timeout: 30000,
+          });
+          return altRes.data;
+        } catch (altErr: any) {
+          console.error(`[DocuSeal] Create Submission Error at ${altUrl}:`, altErr.response?.data || altErr.message);
+          throw new Error(`DocuSeal submission failed at ${altUrl} (${altErr.response?.status || 500}): ${altErr.response?.data?.error || altErr.response?.data?.message || altErr.message}`);
+        }
       }
-      console.error('[DocuSeal] Create Submission Error:', err.response?.data || err.message);
-      throw new Error(err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to create DocuSeal submission');
+      console.error(`[DocuSeal] Create Submission Error at ${url}:`, err.response?.data || err.message);
+      throw new Error(`DocuSeal submission failed at ${url} (${err.response?.status || 500}): ${err.response?.data?.error || err.response?.data?.message || err.message}`);
     }
   }
 

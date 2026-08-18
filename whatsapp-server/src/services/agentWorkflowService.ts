@@ -416,7 +416,7 @@ export class AgentWorkflowService {
     );
 
     try {
-      const templateId = session.selectedTemplateId || 2;
+      const templateId = session.selectedTemplateId || 3;
       const extracted = await MobigoAiService.extractContractData(session.textNotes, session.bufferedFiles, templateId);
 
       // Smart Defaults for missing contract values

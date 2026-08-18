@@ -24,43 +24,27 @@ export async function handleInboundEvent(event: InboundMessageEvent): Promise<vo
     });
   }
 
-  // 2. Action: If a file / document is received, process DocuSeal submission
+  // 2. Action: If a file / document is received outside workflow, create direct document submission
   if (hasMedia && fileBuffer && (mediaType === 'document' || mediaType === 'image')) {
     try {
-      const defaultTemplateId = process.env.DOCUSEAL_DEFAULT_TEMPLATE_ID;
       const fileBase64 = `data:${mimetype || 'application/pdf'};base64,${fileBuffer.toString('base64')}`;
       const docName = fileName || `WhatsApp_Doc_${Date.now()}.${mediaType === 'image' ? 'jpg' : 'pdf'}`;
 
-      let submission: any;
-
-      if (defaultTemplateId) {
-        // Create submission using existing template
-        submission = await docusealService.createSubmission({
-          template_id: defaultTemplateId,
-          submitters: [
-            {
-              phone: senderPhone,
-              name: pushName || `WhatsApp User ${senderPhone}`,
-            },
-          ],
-        });
-      } else {
-        // Create direct document submission
-        submission = await docusealService.createSubmission({
-          submitters: [
-            {
-              phone: senderPhone,
-              name: pushName || `WhatsApp User ${senderPhone}`,
-            },
-          ],
-          documents: [
-            {
-              name: docName,
-              file: fileBase64,
-            },
-          ],
-        });
-      }
+      // Create direct document submission
+      const submission = await docusealService.createSubmission({
+        submitters: [
+          {
+            phone: senderPhone,
+            name: pushName || `WhatsApp User ${senderPhone}`,
+          },
+        ],
+        documents: [
+          {
+            name: docName,
+            file: fileBase64,
+          },
+        ],
+      });
 
       console.log(`[Inbound Action] Created DocuSeal submission ${submission?.id || 'OK'} for ${senderPhone}`);
 

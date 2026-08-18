@@ -36,6 +36,7 @@ export interface ActiveSession {
 }
 
 const activeSessions = new Map<string, ActiveSession>();
+const inFlightInits = new Map<string, Promise<ActiveSession>>();
 const systemSentMessageIds = new Set<string>();
 
 export function markSystemSentMessageId(msgId?: string) {
@@ -60,6 +61,9 @@ export function removeActiveSession(sessionId: string): void {
   const active = activeSessions.get(sessionId);
   if (active) {
     try {
+      active.socket.ev.removeAllListeners('connection.update');
+      active.socket.ev.removeAllListeners('messages.upsert');
+      active.socket.ev.removeAllListeners('creds.update');
       active.socket.end(undefined);
     } catch (_) {}
     activeSessions.delete(sessionId);
@@ -114,149 +118,171 @@ export async function initWhatsAppSession(sessionId: string): Promise<ActiveSess
   if (existing && existing.status === SessionStatus.CONNECTED) {
     return existing;
   }
+  if (inFlightInits.has(sessionId)) {
+    return inFlightInits.get(sessionId)!;
+  }
 
-  await SessionStore.createSession({ session_id: sessionId });
+  const initPromise = (async () => {
+    // Safely cleanup any previous socket instance
+    if (existing) {
+      try {
+        existing.socket.ev.removeAllListeners('connection.update');
+        existing.socket.ev.removeAllListeners('messages.upsert');
+        existing.socket.ev.removeAllListeners('creds.update');
+        existing.socket.end(undefined);
+      } catch (_) {}
+    }
 
-  let state: AuthenticationState;
-  let saveCreds: () => Promise<void>;
-  let clearCreds: (() => Promise<void>) | undefined;
+    await SessionStore.createSession({ session_id: sessionId });
 
-  const hasRedis = Boolean(process.env.REDIS_HOST);
+    let state: AuthenticationState;
+    let saveCreds: () => Promise<void>;
+    let clearCreds: (() => Promise<void>) | undefined;
 
-  if (hasRedis) {
-    try {
-      const redisAuth = await useRedisAuthState(sessionId);
-      state = redisAuth.state;
-      saveCreds = redisAuth.saveCreds;
-      clearCreds = redisAuth.clearCreds;
-      console.log(`[Baileys] Using Redis Auth State for session "${sessionId}"`);
-    } catch (err) {
-      console.warn(`[Baileys] Failed to use Redis auth for "${sessionId}", falling back to disk:`, err);
+    const hasRedis = Boolean(process.env.REDIS_HOST);
+
+    if (hasRedis) {
+      try {
+        const redisAuth = await useRedisAuthState(sessionId);
+        state = redisAuth.state;
+        saveCreds = redisAuth.saveCreds;
+        clearCreds = redisAuth.clearCreds;
+        console.log(`[Baileys] Using Redis Auth State for session "${sessionId}"`);
+      } catch (err) {
+        console.warn(`[Baileys] Failed to use Redis auth for "${sessionId}", falling back to disk:`, err);
+        const sessionFolder = path.join(SESSIONS_DIR, sessionId);
+        const fileAuth = await useMultiFileAuthState(sessionFolder);
+        state = fileAuth.state;
+        saveCreds = fileAuth.saveCreds;
+      }
+    } else {
       const sessionFolder = path.join(SESSIONS_DIR, sessionId);
+      if (!fs.existsSync(sessionFolder)) {
+        fs.mkdirSync(sessionFolder, { recursive: true });
+      }
       const fileAuth = await useMultiFileAuthState(sessionFolder);
       state = fileAuth.state;
       saveCreds = fileAuth.saveCreds;
     }
-  } else {
-    const sessionFolder = path.join(SESSIONS_DIR, sessionId);
-    if (!fs.existsSync(sessionFolder)) {
-      fs.mkdirSync(sessionFolder, { recursive: true });
-    }
-    const fileAuth = await useMultiFileAuthState(sessionFolder);
-    state = fileAuth.state;
-    saveCreds = fileAuth.saveCreds;
-  }
 
-  const logger = pino({ level: 'silent' });
-  let version = [2, 3000, 1043857760] as any;
-  try {
-    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000));
-    const fetched = await Promise.race([fetchLatestBaileysVersion(), timeout]);
-    if (fetched && (fetched as any).version) {
-      version = (fetched as any).version;
-    }
-  } catch (verErr) {
-    console.warn('[Baileys] Using fallback version due to fetch error:', verErr);
-  }
-
-  console.log(`[Baileys] Initializing WASocket for "${sessionId}" with version:`, version);
-
-  const sock = makeWASocket({
-    version,
-    auth: {
-      creds: state.creds,
-      keys: makeCacheableSignalKeyStore(state.keys, logger),
-    },
-    browser: Browsers.macOS('Chrome'),
-    printQRInTerminal: true,
-    logger,
-    syncFullHistory: false,
-    generateHighQualityLinkPreview: false,
-    defaultQueryTimeoutMs: 60_000,
-  });
-
-  const sessionObj: ActiveSession = {
-    socket: sock,
-    sessionId,
-    status: SessionStatus.STARTING,
-    clearCreds,
-    lastActiveAt: new Date(),
-  };
-  activeSessions.set(sessionId, sessionObj);
-
-  sock.ev.on('creds.update', saveCreds);
-
-  sock.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect, qr } = update;
-
-    if (qr) {
-      try {
-        const qrBase64 = await QRCode.toDataURL(qr);
-        sessionObj.status = SessionStatus.QR_READY;
-        sessionObj.qrCode = qrBase64;
-        await SessionStore.updateSession(sessionId, {
-          status: SessionStatus.QR_READY,
-          qr_code: qrBase64,
-        });
-        console.log(`[Baileys] QR code ready for session "${sessionId}". Scan with WhatsApp!`);
-      } catch (err) {
-        console.error(`[Baileys] Failed to generate QR data URL:`, err);
+    const logger = pino({ level: 'silent' });
+    let version = [2, 3000, 1043857760] as any;
+    try {
+      const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000));
+      const fetched = await Promise.race([fetchLatestBaileysVersion(), timeout]);
+      if (fetched && (fetched as any).version) {
+        version = (fetched as any).version;
       }
+    } catch (verErr) {
+      console.warn('[Baileys] Using fallback version due to fetch error:', verErr);
     }
 
-    if (connection === 'open') {
-      const rawUserJid = sock.user?.id || '';
-      const phoneNumber = rawUserJid.split(':')[0].replace(/[^0-9]/g, '');
-      const pushName = sock.user?.name || '';
+    console.log(`[Baileys] Initializing WASocket for "${sessionId}" with version:`, version);
 
-      sessionObj.status = SessionStatus.CONNECTED;
-      sessionObj.qrCode = undefined;
-      sessionObj.phoneNumber = phoneNumber;
-      sessionObj.pushName = pushName;
-      sessionObj.lastActiveAt = new Date();
+    const sock = makeWASocket({
+      version,
+      auth: {
+        creds: state.creds,
+        keys: makeCacheableSignalKeyStore(state.keys, logger),
+      },
+      browser: Browsers.macOS('Chrome'),
+      printQRInTerminal: true,
+      logger,
+      syncFullHistory: false,
+      generateHighQualityLinkPreview: false,
+      defaultQueryTimeoutMs: 60_000,
+    });
 
-      await SessionStore.updateSession(sessionId, {
-        status: SessionStatus.CONNECTED,
-        qr_code: '',
-        phone_number: phoneNumber,
-        push_name: pushName,
-        last_phone_activity_at: new Date().toISOString(),
-      });
+    const sessionObj: ActiveSession = {
+      socket: sock,
+      sessionId,
+      status: SessionStatus.STARTING,
+      clearCreds,
+      lastActiveAt: new Date(),
+    };
+    activeSessions.set(sessionId, sessionObj);
 
-      console.log(`✅ [Baileys] WhatsApp Connected: session="${sessionId}", phone=+${phoneNumber}, name="${pushName}"`);
-    }
+    sock.ev.on('creds.update', saveCreds);
 
-    if (connection === 'close') {
-      sessionObj.status = SessionStatus.DISCONNECTED;
-      const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
-      const isLoggedOut = statusCode === DisconnectReason.loggedOut;
+    sock.ev.on('connection.update', async (update) => {
+      const { connection, lastDisconnect, qr } = update;
 
-      if (isLoggedOut) {
-        console.log(`❌ [Baileys] WhatsApp Session logged out (401): ${sessionId}`);
+      if (qr) {
+        try {
+          const qrBase64 = await QRCode.toDataURL(qr);
+          sessionObj.status = SessionStatus.QR_READY;
+          sessionObj.qrCode = qrBase64;
+          await SessionStore.updateSession(sessionId, {
+            status: SessionStatus.QR_READY,
+            qr_code: qrBase64,
+          });
+          console.log(`[Baileys] QR code ready for session "${sessionId}". Scan with WhatsApp!`);
+        } catch (err) {
+          console.error(`[Baileys] Failed to generate QR data URL:`, err);
+        }
+      }
+
+      if (connection === 'open') {
+        const rawUserJid = sock.user?.id || '';
+        const phoneNumber = rawUserJid.split(':')[0].replace(/[^0-9]/g, '');
+        const pushName = sock.user?.name || '';
+
+        sessionObj.status = SessionStatus.CONNECTED;
+        sessionObj.qrCode = undefined;
+        sessionObj.phoneNumber = phoneNumber;
+        sessionObj.pushName = pushName;
+        sessionObj.lastActiveAt = new Date();
+
         await SessionStore.updateSession(sessionId, {
-          status: SessionStatus.DISCONNECTED,
+          status: SessionStatus.CONNECTED,
           qr_code: '',
+          phone_number: phoneNumber,
+          push_name: pushName,
+          last_phone_activity_at: new Date().toISOString(),
         });
-        if (clearCreds) {
-          await clearCreds().catch(console.error);
+
+        console.log(`✅ [Baileys] WhatsApp Connected: session="${sessionId}", phone=+${phoneNumber}, name="${pushName}"`);
+      }
+
+      if (connection === 'close') {
+        sessionObj.status = SessionStatus.DISCONNECTED;
+        const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
+        const isLoggedOut = statusCode === DisconnectReason.loggedOut;
+        const isReplaced = statusCode === DisconnectReason.connectionReplaced;
+
+        if (isLoggedOut) {
+          console.log(`❌ [Baileys] WhatsApp Session logged out (401): ${sessionId}`);
+          await SessionStore.updateSession(sessionId, {
+            status: SessionStatus.DISCONNECTED,
+            qr_code: '',
+          });
+          if (clearCreds) {
+            await clearCreds().catch(console.error);
+          } else {
+            const sessionFolder = path.join(SESSIONS_DIR, sessionId);
+            try {
+              fs.rmSync(sessionFolder, { recursive: true, force: true });
+            } catch (_) {}
+          }
+          activeSessions.delete(sessionId);
+        } else if (isReplaced) {
+          console.warn(`⚠️ [Baileys] Session replaced by another connection (440): ${sessionId}. Halting auto-reconnect to avoid collision.`);
+          await SessionStore.updateSession(sessionId, {
+            status: SessionStatus.DISCONNECTED,
+            qr_code: '',
+          });
+          activeSessions.delete(sessionId);
         } else {
-          const sessionFolder = path.join(SESSIONS_DIR, sessionId);
-          try {
-            fs.rmSync(sessionFolder, { recursive: true, force: true });
-          } catch (_) {}
-        }
-        activeSessions.delete(sessionId);
-      } else {
-        const sessionMeta = await SessionStore.getSession(sessionId);
-        if (sessionMeta?.status !== SessionStatus.DISCONNECTED) {
-          console.log(`🔄 [Baileys] Reconnecting session "${sessionId}" (reason: ${statusCode || 'unknown'})...`);
-          setTimeout(() => {
-            initWhatsAppSession(sessionId).catch(console.error);
-          }, 4000);
+          const sessionMeta = await SessionStore.getSession(sessionId);
+          if (sessionMeta?.status !== SessionStatus.DISCONNECTED) {
+            console.log(`🔄 [Baileys] Reconnecting session "${sessionId}" (reason: ${statusCode || 'unknown'})...`);
+            setTimeout(() => {
+              initWhatsAppSession(sessionId).catch(console.error);
+            }, 4000);
+          }
         }
       }
-    }
-  });
+    });
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify') return;
@@ -485,7 +511,15 @@ export async function initWhatsAppSession(sessionId: string): Promise<ActiveSess
     }
   });
 
-  return sessionObj;
+    return sessionObj;
+  })();
+
+  inFlightInits.set(sessionId, initPromise);
+  try {
+    return await initPromise;
+  } finally {
+    inFlightInits.delete(sessionId);
+  }
 }
 
 export async function restoreAllSessions(): Promise<void> {

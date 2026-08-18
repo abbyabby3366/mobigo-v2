@@ -109,11 +109,11 @@ router.post(['/send-submission', '/:session_id/send-submission'], async (req: Re
   }
 
   try {
-    const templateId = template_id || process.env.DOCUSEAL_DEFAULT_TEMPLATE_ID;
+    const templateId = template_id;
     if (!templateId) {
       return res.status(400).json({
         success: false,
-        error: 'template_id is required or DOCUSEAL_DEFAULT_TEMPLATE_ID must be set in .env',
+        error: 'Parameter "template_id" is required in request body.',
       });
     }
 

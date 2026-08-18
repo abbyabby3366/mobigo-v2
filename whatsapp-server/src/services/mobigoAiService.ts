@@ -35,7 +35,7 @@ export class MobigoAiService {
   static async extractContractData(
     textNotes: string[],
     files: BufferedFile[],
-    templateId: number = 2
+    templateId: number
   ): Promise<ExtractedDocumentData> {
     const baseUrl = docusealService.getApiUrl();
     const apiKey = docusealService.getApiKey();
@@ -57,7 +57,7 @@ export class MobigoAiService {
     }
 
     const endpoint = `${baseUrl}/api/ai_submissions/extract`;
-    console.log(`[MobigoAiService] POST ${endpoint} (template_id: ${templateId}, files: ${files.length}, notes: ${textNotes.length})`);
+    console.log(`[MobigoAiService] Sending extraction request -> POST ${endpoint} (template_id: ${templateId}, files: ${files.length}, notes: ${textNotes.length})`);
 
     let res: Response;
     try {
@@ -71,8 +71,8 @@ export class MobigoAiService {
         signal: AbortSignal.timeout(45000), // 45s timeout for AI extraction
       });
     } catch (networkErr: any) {
-      console.error('[MobigoAiService] Network error reaching endpoint:', networkErr);
-      throw new Error(`Failed to reach Mobigo/DocuSeal server at ${endpoint}: ${networkErr.message}`);
+      console.error(`[MobigoAiService] Network error reaching POST ${endpoint}:`, networkErr);
+      throw new Error(`Failed to reach Mobigo/DocuSeal server at [${endpoint}]: ${networkErr.message}`);
     }
 
     if (!res.ok) {
@@ -83,7 +83,8 @@ export class MobigoAiService {
       } catch (_) {
         errDetail = await res.text().catch(() => '');
       }
-      throw new Error(`Mobigo API error (${res.status}): ${errDetail || res.statusText}`);
+      console.error(`[MobigoAiService] ❌ Mobigo API Error: Status ${res.status} (${res.statusText}) | URL: ${endpoint} | Template ID: ${templateId} | Response: ${errDetail}`);
+      throw new Error(`Mobigo API error (${res.status}) at ${endpoint} [Template: ${templateId}]: ${errDetail || res.statusText}`);
     }
 
     const data = (await res.json()) as any;

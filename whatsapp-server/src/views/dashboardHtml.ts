@@ -1,11 +1,13 @@
+import { docusealService } from '../services/docusealService.js';
+
 export function renderDashboardHtml(): string {
-  const mobigoUrl = (process.env.MOBIGO_API_URL || process.env.DOCUSEAL_PUBLIC_URL || process.env.DOCUSEAL_URL || 'https://mobigo.io7.my').replace(/\/$/, '');
-  let urlLabel = 'mobigo.io7.my';
+  const mobigoUrl = docusealService.getPublicUrl();
+  let urlLabel = 'localhost:3000';
   try {
     const parsed = new URL(mobigoUrl);
-    urlLabel = parsed.port ? parsed.port : (parsed.hostname || 'mobigo.io7.my');
+    urlLabel = parsed.host || parsed.hostname || 'DocuSeal';
   } catch {
-    urlLabel = 'mobigo.io7.my';
+    urlLabel = 'DocuSeal';
   }
 
   return `<!DOCTYPE html>
@@ -77,6 +79,10 @@ export function renderDashboardHtml(): string {
     <!-- Bottom Footer Status -->
     <div class="p-3 border-t border-slate-800 space-y-2 text-xs">
       <div class="p-2.5 bg-slate-800/50 rounded-lg border border-slate-700/50 space-y-1">
+        <div class="flex justify-between text-[11px] text-slate-400">
+          <span>Environment</span>
+          <span class="font-mono font-semibold ${process.env.NODE_ENV === 'production' ? 'text-amber-400' : 'text-emerald-400'} uppercase">${process.env.NODE_ENV || 'development'}</span>
+        </div>
         <div class="flex justify-between text-[11px] text-slate-400">
           <span>Active Phone</span>
           <span id="sidebarPhone" class="font-mono text-slate-200 font-semibold">+601172438377</span>
