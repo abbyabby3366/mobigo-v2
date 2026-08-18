@@ -10,6 +10,13 @@ class DashboardController < ApplicationController
   skip_authorization_check
 
   def index
+    if params[:dashboard_view] == 'submissions'
+      cookies.permanent[:dashboard_view] = 'submissions'
+      session.delete(:templates_unlocked)
+      SubmissionsDashboardController.dispatch(:index, request, response)
+      return
+    end
+
     if cookies.permanent[:dashboard_view] == 'templates'
       if params[:template_password].present?
         if params[:template_password] == '1234'

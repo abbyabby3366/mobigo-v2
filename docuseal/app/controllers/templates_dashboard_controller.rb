@@ -137,6 +137,13 @@ class TemplatesDashboardController < ApplicationController
   end
 
   def check_template_access
+    if params[:dashboard_view] == 'submissions'
+      cookies.permanent[:dashboard_view] = 'submissions'
+      session.delete(:templates_unlocked)
+      redirect_to root_path(dashboard_view: 'submissions')
+      return
+    end
+
     return if session[:templates_unlocked]
 
     if params[:template_password].present?
