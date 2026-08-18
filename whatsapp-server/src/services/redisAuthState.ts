@@ -11,11 +11,14 @@ import fs from 'fs';
 import path from 'path';
 
 let redisClient: Redis | null = null;
-const SESSIONS_DIR = process.env.SESSIONS_DIR || './sessions';
-
 export function getEnvPrefix(): string {
   const env = (process.env.NODE_ENV || 'development').toLowerCase();
   return env === 'production' ? 'prod' : 'dev';
+}
+
+export function getSessionsDir(): string {
+  const baseDir = process.env.SESSIONS_DIR || './sessions';
+  return path.join(baseDir, getEnvPrefix());
 }
 
 export function getAuthVersion(): string {
@@ -65,7 +68,7 @@ export async function useRedisAuthState(sessionId: string): Promise<{
   saveCreds: () => Promise<void>;
   clearCreds: () => Promise<void>;
 }> {
-  const sessionLocalDir = path.join(SESSIONS_DIR, sessionId);
+  const sessionLocalDir = path.join(getSessionsDir(), sessionId);
   if (!fs.existsSync(sessionLocalDir)) {
     fs.mkdirSync(sessionLocalDir, { recursive: true });
   }

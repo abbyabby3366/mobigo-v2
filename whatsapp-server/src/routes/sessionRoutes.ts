@@ -6,12 +6,11 @@ import {
 } from '../services/baileysManager.js';
 import { SessionStore } from '../services/sessionStore.js';
 import { SessionStatus } from '../types/index.js';
-import { useRedisAuthState } from '../services/redisAuthState.js';
+import { useRedisAuthState, getSessionsDir } from '../services/redisAuthState.js';
 import path from 'path';
 import fs from 'fs';
 
 const router = Router();
-const SESSIONS_DIR = process.env.SESSIONS_DIR || './sessions';
 
 function formatSession(s: any) {
   const isConnected = s.status === SessionStatus.CONNECTED;
@@ -293,7 +292,7 @@ router.post(['/:id/logout', '/whatsapp-sessions/:id/logout'], async (req: Reques
     } catch (_) {}
   }
 
-  const folder = path.join(SESSIONS_DIR, session.session_id);
+  const folder = path.join(getSessionsDir(), session.session_id);
   if (fs.existsSync(folder)) {
     try {
       fs.rmSync(folder, { recursive: true, force: true });
@@ -317,7 +316,7 @@ router.delete(['/:id', '/whatsapp-sessions/:id'], async (req: Request, res: Resp
       await redisAuth.clearCreds();
     } catch (_) {}
 
-    const folder = path.join(SESSIONS_DIR, targetSessionId);
+    const folder = path.join(getSessionsDir(), targetSessionId);
     if (fs.existsSync(folder)) {
       try {
         fs.rmSync(folder, { recursive: true, force: true });

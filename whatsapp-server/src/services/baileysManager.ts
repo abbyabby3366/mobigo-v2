@@ -12,17 +12,11 @@ import QRCode from 'qrcode';
 import path from 'path';
 import fs from 'fs';
 import { SessionStatus, InboundMessageEvent } from '../types/index.js';
-import { useRedisAuthState } from './redisAuthState.js';
+import { useRedisAuthState, getSessionsDir } from './redisAuthState.js';
 import { handleInboundEvent } from './inboundActionHandler.js';
 import { SessionStore } from './sessionStore.js';
 import { MessageStore, MessageDirection, MessageStatus } from './messageStore.js';
 import { AgentWorkflowService } from './agentWorkflowService.js';
-
-const SESSIONS_DIR = process.env.SESSIONS_DIR || './sessions';
-
-if (!fs.existsSync(SESSIONS_DIR)) {
-  fs.mkdirSync(SESSIONS_DIR, { recursive: true });
-}
 
 export interface ActiveSession {
   socket: ReturnType<typeof makeWASocket>;
@@ -150,13 +144,13 @@ export async function initWhatsAppSession(sessionId: string): Promise<ActiveSess
         console.log(`[Baileys] Using Redis Auth State for session "${sessionId}"`);
       } catch (err) {
         console.warn(`[Baileys] Failed to use Redis auth for "${sessionId}", falling back to disk:`, err);
-        const sessionFolder = path.join(SESSIONS_DIR, sessionId);
+        const sessionFolder = path.join(getSessionsDir(), sessionId);
         const fileAuth = await useMultiFileAuthState(sessionFolder);
         state = fileAuth.state;
         saveCreds = fileAuth.saveCreds;
       }
     } else {
-      const sessionFolder = path.join(SESSIONS_DIR, sessionId);
+      const sessionFolder = path.join(getSessionsDir(), sessionId);
       if (!fs.existsSync(sessionFolder)) {
         fs.mkdirSync(sessionFolder, { recursive: true });
       }
@@ -259,7 +253,7 @@ export async function initWhatsAppSession(sessionId: string): Promise<ActiveSess
           if (clearCreds) {
             await clearCreds().catch(console.error);
           } else {
-            const sessionFolder = path.join(SESSIONS_DIR, sessionId);
+            const sessionFolder = path.join(getSessionsDir(), sessionId);
             try {
               fs.rmSync(sessionFolder, { recursive: true, force: true });
             } catch (_) {}

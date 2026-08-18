@@ -1,9 +1,10 @@
-import { getRedisClient, formatRedisKey } from './redisAuthState.js';
+import { getRedisClient, formatRedisKey, getSessionsDir } from './redisAuthState.js';
 import fs from 'fs';
 import path from 'path';
 
-const SESSIONS_DIR = process.env.SESSIONS_DIR || './sessions';
-const MESSAGES_FILE = path.join(SESSIONS_DIR, 'messages_history.json');
+function getMessagesFile(): string {
+  return path.join(getSessionsDir(), 'messages_history.json');
+}
 
 export enum MessageDirection {
   INBOUND = 'INBOUND',
@@ -51,8 +52,9 @@ let messageCache: IChatMessage[] = [];
 
 function loadLocalMessages(): IChatMessage[] {
   try {
-    if (fs.existsSync(MESSAGES_FILE)) {
-      const data = JSON.parse(fs.readFileSync(MESSAGES_FILE, 'utf-8'));
+    const file = getMessagesFile();
+    if (fs.existsSync(file)) {
+      const data = JSON.parse(fs.readFileSync(file, 'utf-8'));
       if (Array.isArray(data)) return data;
     }
   } catch (_) {}
@@ -61,10 +63,11 @@ function loadLocalMessages(): IChatMessage[] {
 
 function saveLocalMessages(msgs: IChatMessage[]): void {
   try {
-    if (!fs.existsSync(SESSIONS_DIR)) {
-      fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+    const dir = getSessionsDir();
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
-    fs.writeFileSync(MESSAGES_FILE, JSON.stringify(msgs.slice(-5000), null, 2), 'utf-8');
+    fs.writeFileSync(getMessagesFile(), JSON.stringify(msgs.slice(-5000), null, 2), 'utf-8');
   } catch (_) {}
 }
 

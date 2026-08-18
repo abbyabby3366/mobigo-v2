@@ -1,18 +1,20 @@
-import { getRedisClient, formatRedisKey } from './redisAuthState.js';
+import { getRedisClient, formatRedisKey, getSessionsDir } from './redisAuthState.js';
 import { IWhatsAppSessionData, IAgentPhoneNumber, SessionStatus } from '../types/index.js';
 import fs from 'fs';
 import path from 'path';
 
-const SESSIONS_DIR = process.env.SESSIONS_DIR || './sessions';
-const STORE_FILE = path.join(SESSIONS_DIR, 'sessions_meta.json');
+function getStoreFile(): string {
+  return path.join(getSessionsDir(), 'sessions_meta.json');
+}
 
 // In-memory cache synced with Redis & local store
 const sessionCache = new Map<string, IWhatsAppSessionData>();
 
 function loadLocalFallback(): Map<string, IWhatsAppSessionData> {
   try {
-    if (fs.existsSync(STORE_FILE)) {
-      const data = JSON.parse(fs.readFileSync(STORE_FILE, 'utf-8'));
+    const file = getStoreFile();
+    if (fs.existsSync(file)) {
+      const data = JSON.parse(fs.readFileSync(file, 'utf-8'));
       const map = new Map<string, IWhatsAppSessionData>();
       if (Array.isArray(data)) {
         data.forEach((s) => map.set(s.session_id, s));
@@ -25,11 +27,12 @@ function loadLocalFallback(): Map<string, IWhatsAppSessionData> {
 
 function saveLocalFallback(map: Map<string, IWhatsAppSessionData>): void {
   try {
-    if (!fs.existsSync(SESSIONS_DIR)) {
-      fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+    const dir = getSessionsDir();
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
     const arr = Array.from(map.values());
-    fs.writeFileSync(STORE_FILE, JSON.stringify(arr, null, 2), 'utf-8');
+    fs.writeFileSync(getStoreFile(), JSON.stringify(arr, null, 2), 'utf-8');
   } catch (_) {}
 }
 
