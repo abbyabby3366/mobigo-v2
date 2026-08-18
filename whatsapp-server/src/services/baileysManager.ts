@@ -17,6 +17,7 @@ import { handleInboundEvent } from './inboundActionHandler.js';
 import { SessionStore } from './sessionStore.js';
 import { MessageStore, MessageDirection, MessageStatus } from './messageStore.js';
 import { AgentWorkflowService } from './agentWorkflowService.js';
+import { LidPhoneMapper } from './lidPhoneMapper.js';
 
 export interface ActiveSession {
   socket: ReturnType<typeof makeWASocket>;
@@ -79,7 +80,8 @@ export async function verifyAndFormatJid(
   // If already a full JID (e.g. @lid, @s.whatsapp.net, @g.us)
   if (phoneOrJid && phoneOrJid.includes('@')) {
     const rawNumber = phoneOrJid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
-    return { jid: phoneOrJid, exists: true, cleanPhone: rawNumber };
+    const canonicalPhone = LidPhoneMapper.canonicalize(rawNumber) || rawNumber;
+    return { jid: phoneOrJid, exists: true, cleanPhone: canonicalPhone };
   }
 
   const clean = normalizePhone(phoneOrJid);
@@ -87,7 +89,8 @@ export async function verifyAndFormatJid(
     return { jid: '', exists: false, cleanPhone: '' };
   }
 
-  const defaultJid = `${clean}@s.whatsapp.net`;
+  const knownLid = LidPhoneMapper.getLidForPhone(clean);
+  const defaultJid = knownLid ? `${knownLid}@lid` : `${clean}@s.whatsapp.net`;
 
   try {
     if (sock && typeof sock.onWhatsApp === 'function') {
@@ -95,8 +98,11 @@ export async function verifyAndFormatJid(
       if (Array.isArray(results) && results.length > 0) {
         const match = results.find((r: any) => r.exists) || results[0];
         if (match && match.exists && match.jid) {
-          const verifiedPhone = match.jid.split('@')[0];
-          return { jid: match.jid, exists: true, cleanPhone: verifiedPhone };
+          if (match.jid.endsWith('@lid')) {
+            const lidDigits = match.jid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+            LidPhoneMapper.registerMapping(lidDigits, clean);
+          }
+          return { jid: match.jid, exists: true, cleanPhone: clean };
         }
       }
     }
@@ -355,7 +361,10 @@ export async function initWhatsAppSession(sessionId: string): Promise<ActiveSess
       }
 
       if (!senderPhone) {
-        senderPhone = fromJid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+        senderPhone = LidPhoneMapper.canonicalize(fromJid) || fromJid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+      } else {
+        if (fromJid) LidPhoneMapper.registerMapping(fromJid, senderPhone, pushName);
+        senderPhone = LidPhoneMapper.canonicalize(senderPhone);
       }
 
       await SessionStore.updateSession(sessionId, {
@@ -431,7 +440,7 @@ export async function initWhatsAppSession(sessionId: string): Promise<ActiveSess
         from_phone: senderPhone,
         to_phone: sessionObj.phoneNumber || '',
         contact_phone: senderPhone,
-        contact_name: pushName,
+        contact_name: pushName || MessageStore.getContactName(senderPhone),
         text: textContent,
         has_media: hasMedia,
         media_type: mediaType,
@@ -541,14 +550,18 @@ export async function sendTextMessage(sessionId: string, toPhone: string, text: 
   const result = await active.socket.sendMessage(targetJid, { text });
   if (result?.key?.id) markSystemSentMessageId(result.key.id);
 
+  const canonicalPhone = LidPhoneMapper.canonicalize(cleanPhone) || cleanPhone;
+  const contactName = MessageStore.getContactName(canonicalPhone) || LidPhoneMapper.getContactName(canonicalPhone) || MessageStore.getContactName(cleanPhone);
+
   // Log Outbound Message
   MessageStore.logMessage({
     id: result?.key?.id || undefined,
     session_id: sessionId,
     direction: MessageDirection.OUTBOUND,
     from_phone: active.phoneNumber || '',
-    to_phone: cleanPhone,
-    contact_phone: cleanPhone,
+    to_phone: canonicalPhone,
+    contact_phone: canonicalPhone,
+    contact_name: contactName,
     text,
     status: MessageStatus.SENT,
   }).catch(console.error);
@@ -593,14 +606,18 @@ export async function sendDocumentMessage(
 
   if (result?.key?.id) markSystemSentMessageId(result.key.id);
 
+  const canonicalPhone = LidPhoneMapper.canonicalize(cleanPhone) || cleanPhone;
+  const contactName = MessageStore.getContactName(canonicalPhone) || LidPhoneMapper.getContactName(canonicalPhone) || MessageStore.getContactName(cleanPhone);
+
   // Log Outbound Document Message
   MessageStore.logMessage({
     id: result?.key?.id || undefined,
     session_id: sessionId,
     direction: MessageDirection.OUTBOUND,
     from_phone: active.phoneNumber || '',
-    to_phone: cleanPhone,
-    contact_phone: cleanPhone,
+    to_phone: canonicalPhone,
+    contact_phone: canonicalPhone,
+    contact_name: contactName,
     text: caption || '',
     has_media: true,
     media_type: 'document',
@@ -645,14 +662,18 @@ export async function sendImageMessage(
 
   if (result?.key?.id) markSystemSentMessageId(result.key.id);
 
+  const canonicalPhone = LidPhoneMapper.canonicalize(cleanPhone) || cleanPhone;
+  const contactName = MessageStore.getContactName(canonicalPhone) || LidPhoneMapper.getContactName(canonicalPhone) || MessageStore.getContactName(cleanPhone);
+
   // Log Outbound Image Message
   MessageStore.logMessage({
     id: result?.key?.id || undefined,
     session_id: sessionId,
     direction: MessageDirection.OUTBOUND,
     from_phone: active.phoneNumber || '',
-    to_phone: cleanPhone,
-    contact_phone: cleanPhone,
+    to_phone: canonicalPhone,
+    contact_phone: canonicalPhone,
+    contact_name: contactName,
     text: caption || '',
     has_media: true,
     media_type: 'image',

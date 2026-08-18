@@ -1,4 +1,5 @@
 import { getRedisClient, formatRedisKey, getSessionsDir } from './redisAuthState.js';
+import { LidPhoneMapper } from './lidPhoneMapper.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -78,6 +79,8 @@ export class MessageStore {
     if (this.isInitialized) return;
     this.isInitialized = true;
 
+    await LidPhoneMapper.init();
+
     // Load local
     messageCache = loadLocalMessages();
 
@@ -94,10 +97,60 @@ export class MessageStore {
         }
       } catch (_) {}
     }
+
+    // Auto-discover any matching contacts in history to unify existing cache
+    this.reconcileCache();
+  }
+
+  private static reconcileCache(): void {
+    // 1. Gather all known contact names and cross-references
+    for (const m of messageCache) {
+      const phone = m.contact_phone || m.to_phone || m.from_phone;
+      if (phone && m.contact_name && !m.contact_name.startsWith('+')) {
+        LidPhoneMapper.registerContactName(phone, m.contact_name);
+      }
+    }
+
+    // 2. Canonicalize all contact_phone fields
+    let modified = false;
+    for (const m of messageCache) {
+      const rawPhone = m.contact_phone || m.to_phone || m.from_phone || '';
+      const canonical = LidPhoneMapper.canonicalize(rawPhone);
+      if (canonical && m.contact_phone !== canonical) {
+        m.contact_phone = canonical;
+        modified = true;
+      }
+      if (!m.contact_name || m.contact_name.startsWith('+')) {
+        const name = LidPhoneMapper.getContactName(m.contact_phone);
+        if (name) {
+          m.contact_name = name;
+          modified = true;
+        }
+      }
+    }
+
+    if (modified) {
+      this.persist();
+    }
+  }
+
+  static getContactName(phoneOrLid: string): string | undefined {
+    return LidPhoneMapper.getContactName(phoneOrLid);
   }
 
   static async logMessage(msg: Partial<IChatMessage>): Promise<IChatMessage> {
     await this.init();
+
+    const rawContactPhone = msg.contact_phone || msg.to_phone || msg.from_phone || '';
+    const canonicalContactPhone = LidPhoneMapper.canonicalize(rawContactPhone) || rawContactPhone.replace(/[^0-9]/g, '');
+
+    let contactName = msg.contact_name || '';
+    if (contactName && !contactName.startsWith('+')) {
+      LidPhoneMapper.registerContactName(canonicalContactPhone, contactName);
+      if (rawContactPhone) LidPhoneMapper.registerContactName(rawContactPhone, contactName);
+    } else {
+      contactName = LidPhoneMapper.getContactName(canonicalContactPhone) || LidPhoneMapper.getContactName(rawContactPhone) || '';
+    }
 
     const newMsg: IChatMessage = {
       id: msg.id || `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -105,8 +158,8 @@ export class MessageStore {
       direction: msg.direction || MessageDirection.OUTBOUND,
       from_phone: msg.from_phone || '',
       to_phone: msg.to_phone || '',
-      contact_phone: msg.contact_phone || msg.to_phone || msg.from_phone || '',
-      contact_name: msg.contact_name || '',
+      contact_phone: canonicalContactPhone,
+      contact_name: contactName,
       text: msg.text || '',
       has_media: msg.has_media || false,
       media_type: msg.media_type,
@@ -140,7 +193,9 @@ export class MessageStore {
 
     // Process from oldest to newest so last message is up to date
     for (const m of msgs) {
-      const phone = m.contact_phone;
+      const rawPhone = m.contact_phone || m.to_phone || m.from_phone;
+      if (!rawPhone) continue;
+      const phone = LidPhoneMapper.canonicalize(rawPhone) || rawPhone.replace(/[^0-9]/g, '');
       if (!phone) continue;
 
       const snippet = m.text || (m.has_media ? `[${m.media_type || 'Media'}] ${m.file_name || ''}` : '');
@@ -158,12 +213,17 @@ export class MessageStore {
         m.text.includes('CTOS CBM')
       ));
 
+      const contactName =
+        (m.contact_name && !m.contact_name.startsWith('+') ? m.contact_name : undefined) ||
+        LidPhoneMapper.getContactName(phone) ||
+        (phone.length <= 13 ? `+${phone}` : 'WhatsApp Contact');
+
       const existing = map.get(phone);
 
       if (!existing) {
         map.set(phone, {
           contact_phone: phone,
-          contact_name: m.contact_name || `+${phone}`,
+          contact_name: contactName,
           session_id: m.session_id,
           last_message: snippet,
           last_timestamp: m.timestamp,
@@ -178,8 +238,8 @@ export class MessageStore {
         if (isAgentMsg) {
           existing.is_agent = true;
         }
-        if (m.contact_name && !existing.contact_name.startsWith('+')) {
-          existing.contact_name = m.contact_name;
+        if (contactName && !contactName.startsWith('+') && (!existing.contact_name || existing.contact_name.startsWith('+'))) {
+          existing.contact_name = contactName;
         }
       }
     }
@@ -192,7 +252,16 @@ export class MessageStore {
   static async getMessagesForContact(contactPhone: string, sessionId?: string): Promise<IChatMessage[]> {
     await this.init();
     const cleanPhone = contactPhone.replace(/[^0-9]/g, '');
-    let msgs = messageCache.filter((m) => m.contact_phone === cleanPhone);
+    const matchKeys = new Set(LidPhoneMapper.getAllMatches(cleanPhone));
+    const canonical = LidPhoneMapper.canonicalize(cleanPhone);
+
+    let msgs = messageCache.filter((m) => {
+      if (m.contact_phone && matchKeys.has(m.contact_phone)) return true;
+      if (m.to_phone && matchKeys.has(m.to_phone.replace(/[^0-9]/g, ''))) return true;
+      if (m.from_phone && matchKeys.has(m.from_phone.replace(/[^0-9]/g, ''))) return true;
+      if (canonical && m.contact_phone && LidPhoneMapper.canonicalize(m.contact_phone) === canonical) return true;
+      return false;
+    });
 
     if (sessionId && sessionId !== 'all') {
       msgs = msgs.filter((m) => m.session_id === sessionId);
@@ -204,8 +273,18 @@ export class MessageStore {
   static async clearConversation(contactPhone: string): Promise<number> {
     await this.init();
     const cleanPhone = contactPhone.replace(/[^0-9]/g, '');
+    const matchKeys = new Set(LidPhoneMapper.getAllMatches(cleanPhone));
+    const canonical = LidPhoneMapper.canonicalize(cleanPhone);
+
     const prevLen = messageCache.length;
-    messageCache = messageCache.filter((m) => m.contact_phone !== cleanPhone);
+    messageCache = messageCache.filter((m) => {
+      if (m.contact_phone && matchKeys.has(m.contact_phone)) return false;
+      if (m.to_phone && matchKeys.has(m.to_phone.replace(/[^0-9]/g, ''))) return false;
+      if (m.from_phone && matchKeys.has(m.from_phone.replace(/[^0-9]/g, ''))) return false;
+      if (canonical && m.contact_phone && LidPhoneMapper.canonicalize(m.contact_phone) === canonical) return false;
+      return true;
+    });
+
     const deleted = prevLen - messageCache.length;
     this.persist();
     return deleted;
@@ -221,3 +300,4 @@ export class MessageStore {
     }
   }
 }
+

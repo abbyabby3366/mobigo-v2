@@ -3,6 +3,7 @@ import { getRedisClient, formatRedisKey } from './redisAuthState.js';
 import { MobigoAiService, ExtractedDocumentData, BufferedFile } from './mobigoAiService.js';
 import { docusealService } from './docusealService.js';
 import { sendTextMessage } from './baileysManager.js';
+import { LidPhoneMapper } from './lidPhoneMapper.js';
 
 export enum AgentChatState {
   IDLE = 'IDLE',
@@ -62,6 +63,8 @@ export class AgentWorkflowService {
    * Initialize and hydrate from Redis on startup
    */
   static async init(): Promise<void> {
+    await LidPhoneMapper.init();
+
     const redis = getRedisClient();
     if (redis) {
       try {
@@ -71,6 +74,9 @@ export class AgentWorkflowService {
           if (raw) {
             const parsed = JSON.parse(raw, BufferJSON.reviver);
             workflowSessions.set(parsed.chatJid, parsed);
+            if (parsed.chatJid && parsed.senderPhone) {
+              LidPhoneMapper.registerMapping(parsed.chatJid, parsed.senderPhone, parsed.pushName);
+            }
           }
         }
         console.log(`[AgentWorkflowService] Hydrated ${workflowSessions.size} active agent session(s) from Redis.`);
@@ -109,6 +115,7 @@ export class AgentWorkflowService {
       if (cleanPhone) {
         workflowSessions.set(`${cleanPhone}@s.whatsapp.net`, session);
       }
+      LidPhoneMapper.registerMapping(session.chatJid, session.senderPhone, session.pushName);
     }
 
     const redis = getRedisClient();
@@ -151,6 +158,10 @@ export class AgentWorkflowService {
     mimetype?: string,
     filePath?: string
   ): Promise<boolean> {
+    if (chatJid && senderPhone) {
+      LidPhoneMapper.registerMapping(chatJid, senderPhone, pushName);
+    }
+
     const trimmed = (textContent || '').trim();
     const lower = trimmed.toLowerCase();
 
