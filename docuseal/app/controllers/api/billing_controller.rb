@@ -25,6 +25,74 @@ module Api
     def create
       account = current_user.account
 
+      # If invoices array or single invoice is passed, save them directly to database
+      if params[:invoices].present? || params[:invoice].present?
+        invoices_data = params[:invoices].is_a?(Array) ? params[:invoices] : [params[:invoice] || params[:invoices]]
+        existing_records = Billing.invoice_records(account)
+        existing_ids = existing_records.map { |r| r['id'] }.to_set
+
+        invoices_data.each do |inv|
+          inv_hash = inv.is_a?(ActionController::Parameters) ? inv.permit!.to_h : inv.to_h
+          inv_hash = inv_hash.stringify_keys
+
+          inv_hash['id'] ||= "INV-#{Time.current.strftime('%Y%m%d')}-#{SecureRandom.hex(3).upcase}"
+          inv_hash['date'] ||= Time.current.iso8601
+          inv_hash['amount'] = inv_hash['amount'].to_f.round(2)
+          inv_hash['currency'] ||= 'USD'
+          inv_hash['status'] ||= 'Paid'
+          inv_hash['payment_method'] ||= 'API'
+          inv_hash['description'] ||= 'eSignature API Credit Top-Up'
+          inv_hash['account_name'] ||= account.name
+          inv_hash['user_email'] ||= current_user.email
+
+          if existing_ids.include?(inv_hash['id'])
+            existing_records = existing_records.map { |r| r['id'] == inv_hash['id'] ? inv_hash : r }
+          else
+            existing_records.unshift(inv_hash)
+            existing_ids.add(inv_hash['id'])
+          end
+        end
+
+        Billing.save_invoice_records(account, existing_records)
+
+        return render json: {
+          success: true,
+          message: "Successfully saved #{invoices_data.size} invoice(s) to database.",
+          account_id: account.id,
+          total_invoices: existing_records.size,
+          invoices: existing_records
+        }
+      end
+
+      # If AI credits top-up is requested
+      if params[:ai_credits].present? || params[:type].to_s == 'ai_credits'
+        credits_count = (params[:ai_credits] || params[:credits]).to_i
+        usd_amount = params[:amount].present? ? params[:amount].to_f.round(2) : AiCredit.credits_to_usd(credits_count)
+        desc = params[:description].presence || "#{credits_count} AI credits"
+
+        result = AiCredit.top_up!(
+          account,
+          credits: credits_count,
+          usd: usd_amount,
+          method: params[:method].presence || 'API',
+          user: current_user,
+          description: desc,
+          reference: params[:reference],
+          date: params[:date]
+        )
+
+        return render json: {
+          success: true,
+          message: "Successfully added #{credits_count} AI credits ($#{sprintf('%.2f', usd_amount)} USD)",
+          account_id: account.id,
+          credits_added: credits_count,
+          amount_added: usd_amount,
+          new_ai_balance: result[:new_balance],
+          invoice_id: result[:invoice_id],
+          currency: 'USD'
+        }
+      end
+
       # If explicit balance or action == 'set' is provided, set exact balance directly
       if params[:balance].present? || params[:action].to_s == 'set'
         target_balance = (params[:balance] || params[:amount]).to_f.round(2)

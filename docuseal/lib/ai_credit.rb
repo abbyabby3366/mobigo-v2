@@ -207,11 +207,68 @@ module AiCredit
     config.value
   end
 
-  def set_credits(account, credits_amount)
+  def set_credits(account, credits_amount, record_invoice: true, user: nil, method: 'API', description: nil)
     return nil if account.nil?
     return set_balance(account, nil) if credits_amount.nil?
 
-    set_balance(account, credits_to_usd(credits_amount))
+    old_credits = credits(account) || 0
+    target_usd = credits_to_usd(credits_amount)
+    set_balance(account, target_usd)
+
+    diff_credits = (credits_amount - old_credits).round(2)
+    if record_invoice && diff_credits > 0
+      diff_usd = credits_to_usd(diff_credits)
+      desc = description.presence || "#{diff_credits.to_i} AI credits"
+      Billing.record_invoice!(
+        account,
+        amount: diff_usd,
+        method: method,
+        description: desc,
+        user: user
+      )
+    end
+
+    target_usd
+  end
+
+  def top_up!(account, credits: nil, usd: nil, method: 'API', user: nil, description: nil, reference: nil, date: nil)
+    return if account.nil?
+
+    usd_amount = if usd.present?
+                   usd.to_f.round(2)
+                 elsif credits.present?
+                   credits_to_usd(credits)
+                 else
+                   0.0
+                 end
+
+    credits_count = usd_to_credits(usd_amount).to_i
+    desc = description.presence || "#{credits_count} AI credits"
+
+    current_bal = balance(account) || 0.0
+    new_bal = (current_bal + usd_amount).round(2)
+    set_balance(account, new_bal)
+
+    invoice = Billing.record_invoice!(
+      account,
+      amount: usd_amount,
+      method: method,
+      description: desc,
+      user: user,
+      reference: reference,
+      previous_balance: current_bal,
+      new_balance: new_bal,
+      date: date
+    )
+
+    {
+      previous_balance: current_bal,
+      new_balance: new_bal,
+      credits_added: credits_count,
+      amount_added: usd_amount,
+      invoice: invoice,
+      invoice_id: invoice ? invoice['id'] : nil
+    }
   end
 
   def set_credentials(account, key:, url: nil, model: nil, fallback_model: nil)

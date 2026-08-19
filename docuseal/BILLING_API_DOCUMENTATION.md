@@ -100,6 +100,36 @@ Add funds or deduct amount from the current credit balance.
 
 ---
 
+### **Option C: Top Up AI Credits (Auto-Generates Invoice)**
+Add AI credits directly. The cost is computed ($1.00 USD = 100 Credits) and an official invoice entry (e.g. "1000 AI credits") is automatically generated and added to the billing invoice list.
+
+#### **Endpoint**
+`POST /api/billing`
+
+#### **Request Body (AI Credits)**
+```json
+{
+  "ai_credits": 1000,
+  "description": "1000 AI credits"
+}
+```
+
+#### **Success Response** (`200 OK`)
+```json
+{
+  "success": true,
+  "message": "Successfully added 1000 AI credits ($10.00 USD)",
+  "account_id": 1,
+  "credits_added": 1000,
+  "amount_added": 10.0,
+  "new_ai_balance": 10.0,
+  "invoice_id": "INV-20260819-A1B2C3",
+  "currency": "USD"
+}
+```
+
+---
+
 ## 2. Get Current Balance & Usage
 
 Retrieve the current credit balance, rate per completed signature, and month/all-time metrics.

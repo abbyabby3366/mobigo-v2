@@ -226,7 +226,18 @@ module Billing
     cfg = account.account_configs.find_by(key: AccountConfig::BILLING_INVOICES)
     return [] if cfg.nil? || cfg.value.blank?
 
-    JSON.parse(cfg.value) rescue []
+    records = JSON.parse(cfg.value) rescue []
+    records.map do |inv|
+      # If invoice ID has standard date prefix INV-YYYYMMDD, ensure date is consistent
+      if inv['id'] =~ /^INV-(\d{4})(\d{2})(\d{2})/
+        id_date_str = "#{$1}-#{$2}-#{$3}"
+        current_inv_date = inv['date'].to_s
+        unless current_inv_date.start_with?(id_date_str)
+          inv['date'] = "#{id_date_str}T12:00:00+08:00"
+        end
+      end
+      inv
+    end
   end
 
   def save_invoice_records(account, records)
@@ -237,16 +248,24 @@ module Billing
     cfg.save!
   end
 
-  def record_invoice!(account, amount:, method: 'API', description: nil, user: nil, reference: nil, previous_balance: nil, new_balance: nil)
+  def record_invoice!(account, amount:, method: 'API', description: nil, user: nil, reference: nil, previous_balance: nil, new_balance: nil, date: nil)
     return if account.nil?
 
     invoice_id = reference.presence || "INV-#{Time.current.strftime('%Y%m%d')}-#{SecureRandom.hex(3).upcase}"
     user_email = user&.email || (account.respond_to?(:users) ? account.users.first&.email : nil)
     desc = description.presence || (method.to_s.casecmp('api').zero? ? 'API Balance Top-Up' : 'Account Balance Top-Up')
 
+    inv_date = if date.present?
+                 date
+               elsif invoice_id =~ /^INV-(\d{4})(\d{2})(\d{2})/
+                 "#{$1}-#{$2}-#{$3}T12:00:00+08:00"
+               else
+                 Time.current.iso8601
+               end
+
     invoice = {
       'id' => invoice_id,
-      'date' => Time.current.iso8601,
+      'date' => inv_date,
       'amount' => amount.to_f.round(2),
       'currency' => 'USD',
       'status' => 'Paid',
