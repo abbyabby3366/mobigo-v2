@@ -98,18 +98,31 @@ module AiSubmissionExtractor
 
       DOMAIN-SPECIFIC RAW EXTRACTION RULES & FIELD MAPPING GUIDANCE:
       1. Contact & Identity Information:
-         - Customer / Recipient Full Name ("Nama", "Nama Penerima", "Pihak B", "Name"): Extract from MyKad IC photo, Passport photo/page, or text notes (e.g. MOHAMMAD FAIZ BIN MOHD KHATIP).
-         - IC / Identity Card Number / Passport Number ("No. Kad Pengenalan", "No. KP", "IC", "NRIC", "No Kad Pengenalan", "Passport", "No. Passport"): Extract IC number from MyKad image OR Passport number from Passport document/photo or text notes (e.g. 890425-02-5957 or A12345678). If customer provides a Passport instead of MyKad/IC, ALWAYS place the extracted Passport Number into the "No. Kad Pengenalan" / "No Kad Pengenalan" / "No. KP" / "IC" / "NRIC" field.
-         - Phone Number ("Nombor Telefon", "No. Tel", "Mobile"): Extract from WhatsApp/order text (e.g. 01153565717).
-         - Email Address ("E-mel", "Email"): Extract from WhatsApp/order text (e.g. mohdfaiz5957@gmail.com).
-         - Address ("Alamat", "Alamat Penghantaran", "Address"): Extract full residential or delivery address from MyKad, Passport, utility bill, or text notes.
-         - Branch / Cawangan Name ("branch_name", "Branch Name", "branch", "Cawangan", "cawangan", "Nama Cawangan"): Extract branch name from notes or text if provided (e.g. "branch name: ABC Holdings" -> "ABC Holdings"). Put in fields["branch_name"].
+         - Customer / Recipient Full Name ("Nama", "Nama Penerima", "Pihak B", "Name"):
+           * Extract from MyKad IC photo, Passport biodata page, or text notes (e.g. MOHAMMAD FAIZ BIN MOHD KHATIP).
+           * If extracting from a Passport with "Surname / Given Names" format, normalize to clean natural order (e.g. "DOE, JOHN" -> "JOHN DOE").
+         - IC / Identity Card Number / Passport Number ("No. Kad Pengenalan", "No. KP", "IC", "NRIC", "No Kad Pengenalan", "Passport", "No. Passport"):
+           * Extract 12-digit IC from MyKad image (standardize as XXXXXX-XX-XXXX, e.g. 890425-02-5957) OR Passport number (e.g. A12345678 from top-right or MRZ line).
+           * If customer provides a Passport instead of MyKad/IC, ALWAYS place the extracted Passport Number into the "No. Kad Pengenalan" / "No Kad Pengenalan" / "No. KP" / "IC" / "NRIC" field.
+           * DO NOT confuse Passport Expiry Date or Date of Birth with Passport Number.
+         - Phone Number ("Nombor Telefon", "No. Tel", "Mobile"):
+           * Extract primary customer mobile number (e.g. 01153565717 or +601153565717). Ignore emergency/guarantor contact numbers if primary customer phone is present.
+         - Email Address ("E-mel", "Email"): Extract valid customer email from text notes (e.g. mohdfaiz5957@gmail.com).
+         - Address ("Alamat", "Alamat Penghantaran", "Address"):
+           * Extract full multiline residential/delivery address including house unit, street, postcode, city, and state from MyKad, utility bill, or text notes.
+         - Branch / Cawangan Name ("branch_name", "Branch Name", "branch", "Cawangan", "cawangan", "Nama Cawangan"):
+           * Extract branch name from notes or text if provided (e.g. "branch name: ABC Holdings" -> "ABC Holdings"). Put in fields["branch_name"].
 
       2. Device & Product Information:
-         - Product Name / Model ("Nama Produk", "Model", "Device Model"): Extract phone model and capacity from text or box image (e.g. "iPhone 17 Pro Max 256GB" or "iPhone 17 Pro Max, 512GB").
-         - Primary IMEI / IMEI 1 ("IMEI1", "imei1", "IMEI", "IMEI / MEID"): Extract primary 15-digit IMEI from device box label (e.g. "354704736663104" or "358701814261211").
-         - Secondary IMEI / IMEI 2 ("IMEI2", "imei2"): Extract secondary 15-digit IMEI from device box label if present (e.g. "354704736416883" or "358701818872716"). If device only has 1 IMEI, leave empty.
-         - Serial Number ("Siri Telefon", "Serial No", "Serial"): Extract serial number from box label (e.g. "LG93CV43WP").
+         - Product Name / Model ("Nama Produk", "Model", "Device Model"):
+           * Extract device model, storage capacity, and color from text or box image (e.g. "iPhone 17 Pro Max 256GB Desert Titanium").
+         - Primary IMEI / IMEI 1 ("IMEI1", "imei1", "IMEI", "IMEI / MEID"):
+           * Extract primary 15-digit IMEI from device box label or text (e.g. "354704736663104"). Strip software version suffixes (e.g. "/ 01").
+           * CRITICAL: DO NOT confuse the 32-digit EID barcode on iPhone boxes with the 15-digit IMEI.
+         - Secondary IMEI / IMEI 2 ("IMEI2", "imei2"):
+           * Extract secondary 15-digit IMEI from device box label if present (e.g. "354704736416883"). If device only has 1 IMEI, leave empty.
+         - Serial Number ("Siri Telefon", "Serial No", "Serial"):
+           * Extract serial number from box label (e.g. "LG93CV43WP").
          - Quantity ("Kuantiti Peralatan", "Quantity"): Usually "1".
          - Note: DO NOT combine IMEIs into "Nombor IMEI"; extract "imei1" and "imei2" separately as RAW fields.
 
