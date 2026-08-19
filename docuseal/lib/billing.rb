@@ -42,7 +42,7 @@ module Billing
     check_and_notify_low_balance!(account, current, new_balance)
   end
 
-  def top_up!(account, amount)
+  def top_up!(account, amount, method: 'API', description: nil, user: nil, reference: nil)
     amount = amount.to_f
     raise ArgumentError, 'Amount must be greater than 0' if amount <= 0
 
@@ -55,10 +55,23 @@ module Billing
       config&.destroy
     end
 
+    invoice = record_invoice!(
+      account,
+      amount: amount,
+      method: method,
+      description: description,
+      user: user,
+      reference: reference,
+      previous_balance: current,
+      new_balance: new_balance
+    )
+
     {
       previous_balance: current,
-      new_balance:,
-      amount_added: amount.round(2)
+      new_balance: new_balance,
+      amount_added: amount.round(2),
+      invoice: invoice,
+      invoice_id: invoice ? invoice['id'] : nil
     }
   end
 
@@ -203,6 +216,93 @@ module Billing
         amount = "-$#{sprintf('%.2f', PRICE_PER_SIGNATURE)} USD"
 
         csv << [date, tx.submission_id, submission_name, submitter_email, 'API Signature', amount, 'Paid']
+      end
+    end
+  end
+
+  def invoice_records(account)
+    return [] if account.nil?
+
+    cfg = account.account_configs.find_by(key: AccountConfig::BILLING_INVOICES)
+    return [] if cfg.nil? || cfg.value.blank?
+
+    JSON.parse(cfg.value) rescue []
+  end
+
+  def save_invoice_records(account, records)
+    return if account.nil?
+
+    cfg = account.account_configs.find_or_initialize_by(key: AccountConfig::BILLING_INVOICES)
+    cfg.value = records.to_json
+    cfg.save!
+  end
+
+  def record_invoice!(account, amount:, method: 'API', description: nil, user: nil, reference: nil, previous_balance: nil, new_balance: nil)
+    return if account.nil?
+
+    invoice_id = reference.presence || "INV-#{Time.current.strftime('%Y%m%d')}-#{SecureRandom.hex(3).upcase}"
+    user_email = user&.email || (account.respond_to?(:users) ? account.users.first&.email : nil)
+    desc = description.presence || (method.to_s.casecmp('api').zero? ? 'API Balance Top-Up' : 'Account Balance Top-Up')
+
+    invoice = {
+      'id' => invoice_id,
+      'date' => Time.current.iso8601,
+      'amount' => amount.to_f.round(2),
+      'currency' => 'USD',
+      'status' => 'Paid',
+      'payment_method' => method.to_s,
+      'description' => desc,
+      'user_email' => user_email,
+      'account_name' => account.name,
+      'previous_balance' => previous_balance&.to_f&.round(2),
+      'new_balance' => new_balance&.to_f&.round(2)
+    }
+
+    records = invoice_records(account)
+    records.unshift(invoice)
+    save_invoice_records(account, records)
+    invoice
+  end
+
+  def invoices(account, limit: nil, start_date: nil, end_date: nil)
+    records = invoice_records(account)
+
+    if start_date.present?
+      start_str = start_date.is_a?(Date) ? start_date.strftime('%Y-%m-%d') : start_date.to_s
+      records = records.select { |r| (r['date'] || '') >= start_str }
+    end
+
+    if end_date.present?
+      end_str = end_date.is_a?(Date) ? end_date.strftime('%Y-%m-%d') : end_date.to_s
+      records = records.select { |r| (r['date'] || '') <= "#{end_str}T23:59:59" }
+    end
+
+    records = records.sort_by { |r| r['date'] || '' }.reverse
+    records = records.first(limit) if limit.present?
+    records
+  end
+
+  def find_invoice(account, invoice_id)
+    return nil if account.nil? || invoice_id.blank?
+
+    invoice_records(account).find { |r| r['id'] == invoice_id }
+  end
+
+  def total_topped_up(account)
+    invoice_records(account).sum { |r| r['amount'].to_f }.round(2)
+  end
+
+  def generate_invoices_csv(invoices, timezone = 'Singapore')
+    require 'csv'
+
+    CSV.generate(headers: true) do |csv|
+      csv << ['Invoice ID', 'Date', 'Description', 'Payment Method', 'Amount (USD)', 'Status', 'Account']
+
+      invoices.each do |inv|
+        date = Time.zone.parse(inv['date'].to_s)&.in_time_zone(timezone)&.strftime('%b %d, %Y %H:%M') rescue inv['date']
+        amount = "+$#{sprintf('%.2f', inv['amount'].to_f)} USD"
+
+        csv << [inv['id'], date, inv['description'], inv['payment_method'], amount, inv['status'], inv['account_name']]
       end
     end
   end

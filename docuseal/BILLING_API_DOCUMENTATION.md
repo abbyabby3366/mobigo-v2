@@ -26,61 +26,75 @@ http://localhost:3000/api
 
 ---
 
-## 1. Top Up Balance
+## 1. Top Up, Deduct, or Edit Balance
 
-Add funds / credits to your DocuSeal account balance.
+### **Option A: Edit / Set Exact Balance**
+Directly set the exact account balance to a specific USD amount.
 
-### **Endpoint**
-`POST /api/billing`
+#### **Endpoint**
+`PUT /api/billing` or `PATCH /api/billing` (or `POST /api/billing` with `"balance": 50.00`)
 
-### **Headers**
-| Header | Value | Description |
-| :--- | :--- | :--- |
-| `X-Auth-Token` | `YOUR_API_TOKEN` | Required. Your DocuSeal API authentication token. |
-| `Content-Type` | `application/json` | Required. Must be `application/json`. |
-
-### **Request Body**
-| Parameter | Type | Required | Description |
-| :--- | :--- | :--- | :--- |
-| `amount` | `Float` or `Integer` | **Yes** | The amount in USD to add to the account credit balance. Must be greater than `0`. |
-
-#### Example Request Body
+#### **Request Body**
 ```json
 {
-  "amount": 50.00
+  "balance": 50.00,
+  "description": "Adjusted balance"
 }
 ```
 
----
-
-### **Success Response** (`200 OK`)
+#### **Success Response** (`200 OK`)
 ```json
 {
   "success": true,
-  "message": "Successfully topped up $50.00 USD",
+  "message": "Successfully updated balance to $50.00 USD",
   "account_id": 1,
-  "amount_added": 50.0,
-  "previous_balance": 10.0,
-  "new_balance": 60.0,
+  "previous_balance": 33.0,
+  "new_balance": 50.0,
+  "difference": 17.0,
+  "invoice_id": "INV-20260819-A1B2C3",
   "currency": "USD"
 }
 ```
 
 ---
 
-### **Error Responses**
+### **Option B: Add or Deduct Balance (Amount Adjustment)**
+Add funds or deduct amount from the current credit balance.
 
-#### `422 Unprocessable Content` (Invalid Amount)
+#### **Endpoint**
+`POST /api/billing`
+
+#### **Headers**
+| Header | Value | Description |
+| :--- | :--- | :--- |
+| `X-Auth-Token` | `YOUR_API_TOKEN` | Required. Your DocuSeal API authentication token. |
+| `Content-Type` | `application/json` | Required. Must be `application/json`. |
+
+#### **Request Body (Top-Up)**
 ```json
 {
-  "error": "Invalid top-up amount. Amount must be greater than 0."
+  "amount": 20.00
 }
 ```
 
-#### `401 Unauthorized` (Invalid or Missing Token)
+#### **Request Body (Deduction)**
 ```json
 {
-  "error": "Not authenticated"
+  "amount": -10.00
+}
+```
+
+#### **Success Response (Top-Up)** (`200 OK`)
+```json
+{
+  "success": true,
+  "message": "Successfully topped up $20.00 USD",
+  "account_id": 1,
+  "amount_added": 20.0,
+  "previous_balance": 30.0,
+  "new_balance": 50.0,
+  "invoice_id": "INV-20260819-A1B2C3",
+  "currency": "USD"
 }
 ```
 

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invoice <%= @invoice['id'] %> - <%= @invoice['account_name'] || 'DocuSeal' %></title>
+  <%= stylesheet_link_tag 'application', media: 'all' %>
+  <style>
+    @media print {
+      .no-print { display: none !important; }
+      body { background: #fff !important; color: #000 !important; }
+      .invoice-container { box-shadow: none !important; border: none !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; }
+    }
+  </style>
+</head>
+<body class="bg-base-200 min-h-screen py-6 sm:py-10 px-4">
+  <div class="max-w-2xl mx-auto">
+    <!-- Top Action Bar (No Print) -->
+    <div class="no-print flex items-center justify-between mb-6">
+      <%= link_to settings_billing_index_path, class: 'btn btn-ghost btn-sm gap-2 font-medium' do %>
+        <%= svg_icon('arrow_left', class: 'w-4 h-4') rescue '←' %>
+        <span>Back to Billing</span>
+      <% end %>
+
+      <div class="flex items-center gap-2">
+        <button type="button" onclick="window.print()" class="btn btn-primary btn-sm gap-2 shadow-sm">
+          <%= svg_icon('printer', class: 'w-4 h-4') rescue '🖨️' %>
+          <span>Print / Save PDF</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Printable Invoice Document -->
+    <div class="invoice-container bg-base-100 border border-base-300 rounded-2xl shadow-xl p-8 sm:p-12 text-base-content">
+      <!-- Header -->
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-8 border-b border-base-300">
+        <div>
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-primary text-primary-content flex items-center justify-center font-bold text-lg">
+              M
+            </div>
+            <span class="font-extrabold text-2xl tracking-tight">Mobigo</span>
+          </div>
+          <p class="text-xs opacity-60 mt-1">eSignature Platform & API Services</p>
+        </div>
+
+        <div class="sm:text-right">
+          <div class="badge badge-success badge-lg font-bold uppercase tracking-wider text-xs px-3 py-1">
+            ✓ <%= @invoice['status'] || 'PAID' %>
+          </div>
+          <div class="text-xs opacity-60 font-mono mt-1">
+            Receipt: <%= @invoice['id'] %>
+          </div>
+        </div>
+      </div>
+
+      <!-- Invoice Details Grid -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 my-8 text-sm">
+        <div>
+          <div class="text-xs uppercase tracking-wider font-semibold opacity-50 mb-1">Billed To</div>
+          <div class="font-bold text-base"><%= @invoice['account_name'].presence || current_account&.name || 'Account' %></div>
+          <% if @invoice['user_email'].present? %>
+            <div class="text-xs opacity-70 mt-0.5"><%= @invoice['user_email'] %></div>
+          <% end %>
+          <div class="text-xs opacity-60 mt-1">Payment Method: <span class="badge badge-xs badge-ghost font-medium"><%= @invoice['payment_method'] || 'API' %></span></div>
+        </div>
+
+        <div class="sm:text-right">
+          <div class="text-xs uppercase tracking-wider font-semibold opacity-50 mb-1">Invoice Details</div>
+          <div><span class="opacity-60">Date:</span> <strong><%= Time.zone.parse(@invoice['date'].to_s)&.in_time_zone(current_account&.timezone || 'Singapore')&.strftime('%B %d, %Y %H:%M') rescue @invoice['date'] %></strong></div>
+          <div class="mt-0.5"><span class="opacity-60">Currency:</span> <strong>USD ($)</strong></div>
+          <div class="mt-0.5"><span class="opacity-60">Status:</span> <strong class="text-success">Completed</strong></div>
+        </div>
+      </div>
+
+      <!-- Line Items Table -->
+      <div class="overflow-x-auto my-6 border border-base-300 rounded-xl">
+        <table class="table w-full text-sm">
+          <thead class="bg-base-200 text-xs uppercase opacity-70">
+            <tr>
+              <th class="py-3 px-4">Item & Description</th>
+              <th class="py-3 px-4 text-center">Qty</th>
+              <th class="py-3 px-4 text-right">Unit Price</th>
+              <th class="py-3 px-4 text-right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="border-b border-base-200">
+              <td class="py-4 px-4">
+                <div class="font-bold text-base-content"><%= @invoice['description'] || 'API Credit Balance Top-Up' %></div>
+                <div class="text-xs opacity-60 mt-0.5">Pay-as-you-go eSignature balance deposit ($0.20 per completed signature)</div>
+              </td>
+              <td class="py-4 px-4 text-center">1</td>
+              <td class="py-4 px-4 text-right font-mono">$<%= sprintf('%.2f', @invoice['amount'].to_f) %></td>
+              <td class="py-4 px-4 text-right font-bold font-mono">$<%= sprintf('%.2f', @invoice['amount'].to_f) %></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Total & Balances -->
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-6 pt-4 border-t border-base-300">
+        <div class="text-xs opacity-60 max-w-xs">
+          <% if @invoice['previous_balance'].present? && @invoice['new_balance'].present? %>
+            <div class="p-3 bg-base-200 rounded-lg space-y-1">
+              <div>Starting Balance: <span class="font-mono">$<%= sprintf('%.2f', @invoice['previous_balance'].to_f) %> USD</span></div>
+              <div>Top-Up Added: <span class="font-mono text-success">+$<%= sprintf('%.2f', @invoice['amount'].to_f) %> USD</span></div>
+              <div class="font-semibold text-base-content border-t border-base-300 pt-1">Resulting Balance: <span class="font-mono">$<%= sprintf('%.2f', @invoice['new_balance'].to_f) %> USD</span></div>
+            </div>
+          <% else %>
+            <span>Thank you for your business. For any billing questions, contact support.</span>
+          <% end %>
+        </div>
+
+        <div class="w-full sm:w-64 space-y-2 text-right">
+          <div class="flex justify-between text-sm">
+            <span class="opacity-70">Subtotal:</span>
+            <span class="font-mono font-medium">$<%= sprintf('%.2f', @invoice['amount'].to_f) %> USD</span>
+          </div>
+          <div class="flex justify-between text-sm">
+            <span class="opacity-70">Tax (0%):</span>
+            <span class="font-mono font-medium">$0.00 USD</span>
+          </div>
+          <div class="divider my-1"></div>
+          <div class="flex justify-between items-center text-lg font-extrabold">
+            <span>Total Paid:</span>
+            <span class="text-primary font-mono text-xl">$<%= sprintf('%.2f', @invoice['amount'].to_f) %> USD</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer Note -->
+      <div class="mt-12 pt-6 border-t border-base-300 text-center text-xs opacity-50">
+        This document serves as an electronic receipt for payment of eSignature API services. Generated on <%= Time.current.strftime('%b %d, %Y %H:%M') %>.
+      </div>
+    </div>
+  </div>
+</body>
+</html>

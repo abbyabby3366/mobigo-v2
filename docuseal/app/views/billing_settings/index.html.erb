@@ -189,6 +189,90 @@
       </div>
     </div>
 
+    <!-- Invoices & Top-Up History -->
+    <div class="card bg-base-200 border border-base-300 shadow-sm mb-6">
+      <div class="card-body p-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+          <div>
+            <h2 class="text-xl font-bold">Invoices & Top-Up History</h2>
+            <p class="text-xs opacity-70 mt-0.5">Official receipts and records of all balance top-ups (API and dashboard).</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <% if @invoices.present? %>
+              <%= link_to invoices_settings_billing_index_path, class: 'btn btn-outline btn-sm gap-1' do %>
+                <span>View All</span>
+                <%= svg_icon('arrow_right', class: 'w-4 h-4') rescue '' %>
+              <% end %>
+            <% end %>
+          </div>
+        </div>
+
+        <% if @invoices.present? %>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra w-full text-sm">
+              <thead>
+                <tr class="text-xs uppercase opacity-60">
+                  <th>Invoice ID</th>
+                  <th>Date</th>
+                  <th>Description</th>
+                  <th>Method</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th class="text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% @invoices.each do |inv| %>
+                  <tr>
+                    <td class="font-mono text-xs font-semibold text-primary whitespace-nowrap">
+                      <%= link_to inv['id'], invoice_settings_billing_index_path(id: inv['id']), target: '_blank', class: 'link link-hover' %>
+                    </td>
+                    <td class="font-mono text-xs opacity-70 whitespace-nowrap">
+                      <%= Time.zone.parse(inv['date'].to_s)&.in_time_zone(current_account&.timezone || 'Singapore')&.strftime('%b %d, %Y %H:%M') rescue inv['date'] %>
+                    </td>
+                    <td>
+                      <div class="font-medium text-base-content">
+                        <%= inv['description'] || 'Balance Top-Up' %>
+                      </div>
+                    </td>
+                    <td>
+                      <span class="badge badge-sm badge-ghost font-medium"><%= inv['payment_method'] || 'API' %></span>
+                    </td>
+                    <td class="font-mono font-medium text-success whitespace-nowrap">
+                      +$<%= sprintf('%.2f', inv['amount'].to_f) %> USD
+                    </td>
+                    <td>
+                      <span class="badge badge-sm badge-success gap-1">
+                        <%= svg_icon('check', class: 'w-3 h-3') rescue '' %> <%= inv['status'] || 'Paid' %>
+                      </span>
+                    </td>
+                    <td class="text-right whitespace-nowrap">
+                      <%= link_to invoice_settings_billing_index_path(id: inv['id']), target: '_blank', class: 'btn btn-ghost btn-xs text-primary gap-1' do %>
+                        <%= svg_icon('file_text', class: 'w-3.5 h-3.5') rescue '' %>
+                        <span>Invoice</span>
+                      <% end %>
+                    </td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+          <div class="mt-4 pt-3 border-t border-base-300 text-center">
+            <%= link_to invoices_settings_billing_index_path, class: 'btn btn-ghost btn-sm text-primary font-medium gap-1' do %>
+              <span>View All Invoices</span>
+              <%= svg_icon('arrow_right', class: 'w-4 h-4') rescue '' %>
+            <% end %>
+          </div>
+        <% else %>
+          <div class="text-center py-8 bg-base-100 rounded-lg border border-dashed border-base-300">
+            <%= svg_icon('file_text', class: 'w-10 h-10 opacity-30 mx-auto mb-2') rescue '' %>
+            <p class="font-medium opacity-80">No invoices recorded yet</p>
+            <p class="text-xs opacity-60 mt-1">Top up your balance to generate your first invoice receipt.</p>
+          </div>
+        <% end %>
+      </div>
+    </div>
+
     <!-- Pricing & Rate Breakdown (Accordion below Recent Activity) -->
     <div class="collapse collapse-arrow bg-base-200 border border-base-300 shadow-sm rounded-2xl">
       <input type="checkbox" />
@@ -250,32 +334,42 @@
     <form method="dialog">
       <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
     </form>
-    <h3 class="font-bold text-lg mb-2">Top Up Balance</h3>
+    <h3 class="font-bold text-lg mb-1">Top Up Balance</h3>
     <p class="text-sm opacity-70 mb-4">
-      Add credits to your account balance for eSignature API requests ($0.20 USD per completed API signature).
+      Add funds to your account balance for eSignature API requests ($0.20 USD per completed API signature). An official invoice will be generated automatically.
     </p>
 
-    <div class="space-y-4">
+    <%= form_with url: top_up_settings_billing_index_path, method: :post, local: true, class: 'space-y-4' do |f| %>
       <div>
-        <label class="label text-xs font-semibold uppercase opacity-70 pb-1">Select Amount</label>
+        <label class="label text-xs font-semibold uppercase opacity-70 pb-1">Quick Select Amount</label>
         <div class="grid grid-cols-3 gap-2">
-          <button type="button" class="btn btn-outline btn-primary">$20 USD</button>
-          <button type="button" class="btn btn-outline btn-primary">$50 USD</button>
-          <button type="button" class="btn btn-outline btn-primary">$100 USD</button>
+          <button type="button" onclick="document.getElementById('topup_amount_input').value='20.00'" class="btn btn-outline btn-primary btn-sm">$20 USD</button>
+          <button type="button" onclick="document.getElementById('topup_amount_input').value='50.00'" class="btn btn-outline btn-primary btn-sm">$50 USD</button>
+          <button type="button" onclick="document.getElementById('topup_amount_input').value='100.00'" class="btn btn-outline btn-primary btn-sm">$100 USD</button>
         </div>
       </div>
 
-      <div class="p-3 bg-base-200 rounded-lg text-xs opacity-80 flex items-center gap-2">
-        <%= svg_icon('info_circle', class: 'w-4 h-4 shrink-0') %>
-        <span>Payment gateway integration will be connected in the next update. External services can top up via the <code>POST /api/billing</code> endpoint.</span>
+      <div>
+        <label class="label text-xs font-semibold uppercase opacity-70 pb-1">Amount (USD)</label>
+        <div class="relative">
+          <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-sm opacity-60 font-bold">$</span>
+          <input type="number" id="topup_amount_input" name="amount" step="1" min="1" placeholder="20.00" value="20.00" required class="input input-bordered input-md w-full pl-7 font-mono font-bold" />
+        </div>
       </div>
-    </div>
 
-    <div class="modal-action mt-6">
-      <form method="dialog">
-        <button class="base-button">Close</button>
-      </form>
-    </div>
+      <div class="p-3 bg-base-200 rounded-lg text-xs opacity-80 flex items-start gap-2">
+        <%= svg_icon('info_circle', class: 'w-4 h-4 shrink-0 mt-0.5') %>
+        <span>Top-ups are credited immediately and an invoice is recorded under <strong>Invoices & Top-Up History</strong>. External services can also top up via <code>POST /api/billing</code>.</span>
+      </div>
+
+      <div class="modal-action mt-6 flex justify-end gap-2">
+        <button type="button" onclick="document.getElementById('topup_modal').close()" class="btn btn-ghost btn-sm">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm font-semibold gap-1">
+          <%= svg_icon('plus_circle', class: 'w-4 h-4') rescue '' %>
+          <span>Top Up Balance</span>
+        </button>
+      </div>
+    <% end %>
   </div>
   <form method="dialog" class="modal-backdrop">
     <button>close</button>

@@ -25,7 +25,7 @@ Rails.application.routes.draw do
 
   namespace :api, defaults: { format: :json } do
     resource :user, only: %i[show]
-    resource :billing, only: %i[show create], controller: 'billing'
+    resource :billing, only: %i[show create update], controller: 'billing'
     resources :attachments, only: %i[create]
     resources :submitter_email_clicks, only: %i[create]
     resources :submitter_form_views, only: %i[create]
@@ -223,6 +223,9 @@ Rails.application.routes.draw do
     resources :billing, only: %i[index], controller: 'billing_settings' do
       collection do
         get :history
+        post :top_up
+        get :invoices
+        get 'invoices/:id', to: 'billing_settings#invoice', as: :invoice
       end
     end
     resources :ai_credits, only: %i[index create], controller: 'ai_credits_settings' do
