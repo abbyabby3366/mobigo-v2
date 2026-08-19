@@ -1,0 +1,157 @@
+<div class="flex flex-wrap space-y-4 md:flex-nowrap md:space-y-0 md:space-x-8 px-3 sm:px-6">
+  <%= render 'shared/settings_nav' %>
+  <div class="flex-grow max-w-3xl">
+    <div class="flex flex-col gap-2 md:flex-row md:justify-between md:items-center mb-6">
+      <div>
+        <div class="flex items-center space-x-2 text-xs opacity-70 mb-1">
+          <%= link_to settings_ai_credits_path, class: 'hover:underline flex items-center gap-1 font-medium' do %>
+            <%= svg_icon('arrow_left', class: 'w-3 h-3') rescue '' %>
+            <span>Back to AI Credits</span>
+          <% end %>
+        </div>
+        <h1 class="text-3xl md:text-4xl font-bold">
+          AI Usage & Credit Activity
+        </h1>
+        <p class="text-sm opacity-70 mt-1">
+          Daily aggregated record of AI tool calls and credit usage (1 USD = 100 Credits, 3 Credits / tool call).
+        </p>
+      </div>
+
+      <div class="flex items-center gap-3 shrink-0 self-start md:self-auto">
+        <%= link_to history_settings_ai_credits_path(params.permit(:start_date, :end_date).merge(format: :csv)), class: 'btn btn-primary btn-sm gap-2' do %>
+          <%= svg_icon('download', class: 'w-4 h-4') rescue '' %>
+          <span>Download CSV</span>
+        <% end %>
+      </div>
+    </div>
+
+    <!-- Stats Summary Grid -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+      <div class="card bg-base-200 border border-base-300 p-4">
+        <div class="text-[11px] uppercase tracking-wider font-semibold opacity-60">Total Tool Calls</div>
+        <div class="text-2xl font-bold text-primary mt-1"><%= number_with_delimiter(@total_tool_calls || 0) %></div>
+        <div class="text-[11px] opacity-60">All time</div>
+      </div>
+      <div class="card bg-base-200 border border-base-300 p-4">
+        <div class="text-[11px] uppercase tracking-wider font-semibold opacity-60">Total Credits Used</div>
+        <div class="text-2xl font-bold text-error mt-1">-<%= number_with_delimiter((@total_credits_spent || 0).to_i) %></div>
+        <div class="text-[11px] opacity-60">≈ $<%= sprintf('%.2f', ((@total_credits_spent || 0) / 100.0)) %> USD</div>
+      </div>
+      <div class="card bg-base-200 border border-base-300 p-4">
+        <div class="text-[11px] uppercase tracking-wider font-semibold opacity-60">This Month Calls</div>
+        <div class="text-2xl font-bold mt-1"><%= number_with_delimiter(@month_tool_calls || 0) %></div>
+        <div class="text-[11px] opacity-60"><%= Time.current.strftime('%B %Y') %></div>
+      </div>
+      <div class="card bg-base-200 border border-base-300 p-4">
+        <div class="text-[11px] uppercase tracking-wider font-semibold opacity-60">This Month Credits</div>
+        <div class="text-2xl font-bold text-error mt-1">-<%= number_with_delimiter((@month_credits_spent || 0).to_i) %></div>
+        <div class="text-[11px] opacity-60">≈ $<%= sprintf('%.2f', ((@month_credits_spent || 0) / 100.0)) %> USD</div>
+      </div>
+    </div>
+
+    <!-- Date Range Filter Form -->
+    <div class="card bg-base-200 border border-base-300 shadow-sm mb-6">
+      <div class="card-body p-4">
+        <%= form_with url: history_settings_ai_credits_path, method: :get, local: true, class: 'flex flex-wrap items-end gap-3' do %>
+          <div class="flex-1 min-w-[140px]">
+            <label class="block text-xs uppercase tracking-wider font-semibold opacity-60 mb-1">
+              Start Date
+            </label>
+            <input type="date" name="start_date" value="<%= params[:start_date] %>" class="input input-bordered input-sm w-full" />
+          </div>
+
+          <div class="flex-1 min-w-[140px]">
+            <label class="block text-xs uppercase tracking-wider font-semibold opacity-60 mb-1">
+              End Date
+            </label>
+            <input type="date" name="end_date" value="<%= params[:end_date] %>" class="input input-bordered input-sm w-full" />
+          </div>
+
+          <div class="flex items-center gap-2 shrink-0">
+            <button type="submit" class="btn btn-sm btn-neutral gap-1">
+              <%= svg_icon('search', class: 'w-3.5 h-3.5') rescue '' %>
+              <span>Filter</span>
+            </button>
+
+            <% if params[:start_date].present? || params[:end_date].present? %>
+              <%= link_to 'Clear', history_settings_ai_credits_path, class: 'btn btn-sm btn-ghost' %>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+    </div>
+
+    <!-- Daily Usage Activity Table -->
+    <div class="card bg-base-200 border border-base-300 shadow-sm mb-6">
+      <div class="card-body p-6">
+        <% if @transactions.present? %>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra w-full text-sm">
+              <thead>
+                <tr class="text-xs uppercase opacity-60">
+                  <th>Date</th>
+                  <th>Document / Submitter</th>
+                  <th>Type</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% @transactions.each do |tx| %>
+                  <% parsed_time = Time.zone.parse(tx['last_used_at'].to_s) rescue nil %>
+                  <% parsed_date = Date.parse(tx['date'].to_s) rescue nil %>
+                  <tr>
+                    <td class="font-mono text-xs opacity-70 whitespace-nowrap">
+                      <% if parsed_time %>
+                        <%= parsed_time.in_time_zone(current_account&.timezone || 'Singapore').strftime('%b %d, %Y %H:%M') %>
+                      <% elsif parsed_date %>
+                        <%= parsed_date.strftime('%b %d, %Y') %>
+                      <% else %>
+                        <%= tx['date'] %>
+                      <% end %>
+                    </td>
+                    <td>
+                      <div class="font-medium text-base-content">
+                        AI Document Extraction (<%= tx['tool_calls'] %> <%= 'call'.pluralize(tx['tool_calls'].to_i) %>)
+                      </div>
+                      <div class="text-xs opacity-60">
+                        <%= tx['credits'] %> Credits • <%= current_user&.email || current_account&.users&.first&.email || 'desmondgiam@gmail.com' %>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="text-xs">
+                        <div>API</div>
+                        <div>AI Extraction</div>
+                      </div>
+                    </td>
+                    <td class="font-mono font-medium text-error whitespace-nowrap">
+                      -$<%= sprintf('%.2f', tx['usd'].to_f) %> USD
+                    </td>
+                    <td>
+                      <span class="badge badge-sm badge-success text-white gap-1">
+                        <%= svg_icon('check', class: 'w-3 h-3') rescue '' %> Paid
+                      </span>
+                    </td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        <% else %>
+          <div class="text-center py-8 bg-base-100 rounded-lg border border-dashed border-base-300">
+            <%= svg_icon('sparkles', class: 'w-10 h-10 opacity-30 mx-auto mb-2 text-primary') rescue '' %>
+            <p class="font-medium opacity-80 text-sm">
+              <% if params[:start_date].present? || params[:end_date].present? %>
+                No AI tool usage found for the selected date range
+              <% else %>
+                No AI tool usage recorded yet
+              <% end %>
+            </p>
+            <p class="text-xs opacity-60 mt-1">Daily AI tool calls and credit deductions will appear here automatically.</p>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  </div>
+  <div class="w-0 md:w-52"></div>
+</div>

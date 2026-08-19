@@ -226,7 +226,10 @@ Rails.application.routes.draw do
       end
     end
     resources :ai_credits, only: %i[index create], controller: 'ai_credits_settings' do
-      post :check_balance, on: :collection
+      collection do
+        post :check_balance
+        get :history
+      end
     end
     resources :profile, only: %i[index] do
       collection do

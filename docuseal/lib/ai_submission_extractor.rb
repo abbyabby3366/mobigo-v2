@@ -22,6 +22,10 @@ module AiSubmissionExtractor
 
   def call(template:, text: nil, files: [], account: nil)
     acc = account || template&.account
+    if acc.present? && !AiCredit.sufficient_credits?(acc, AiCredit::CREDITS_PER_TOOL_CALL)
+      raise "Insufficient AI credit balance (#{AiCredit.credits(acc).to_i} Credits). Please top up or sync your AI credits at /settings/ai_credits."
+    end
+
     api_url = AiCredit.api_url(acc)
     api_key = AiCredit.api_key(acc)
     primary_model = AiCredit.model(acc)
@@ -46,7 +50,9 @@ module AiSubmissionExtractor
 
     raise "AI Extraction failed: #{errors.join('; ')}" if response_json.blank?
 
-    parse_ai_response(response_json, template, acc || template.account)
+    parsed = parse_ai_response(response_json, template, acc || template&.account)
+    AiCredit.deduct_tool_call!(acc || template&.account) if parsed.is_a?(Hash) && parsed[:success]
+    parsed
   end
 
   def build_prompt_parts(template, text, files)

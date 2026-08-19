@@ -12,6 +12,14 @@ module Api
     end
 
     def extract
+      acc = current_account || @template&.account
+      if acc.present? && !AiCredit.sufficient_credits?(acc, AiCredit::CREDITS_PER_TOOL_CALL)
+        return render json: {
+          error: "Insufficient AI credit balance (#{AiCredit.credits(acc).to_i} Credits left). Each AI extraction requires 3 Credits.",
+          credits: AiCredit.credits(acc)
+        }, status: :unprocessable_entity
+      end
+
       text_data = params[:text].presence || params[:text_notes].to_s
       files_data = params[:files] || []
 

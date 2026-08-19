@@ -70,6 +70,7 @@ class AccountConfig < ApplicationRecord
   AI_ROUTER_MODEL = 'ai_router_model'
   AI_ROUTER_FALLBACK_MODEL = 'ai_router_fallback_model'
   AI_CREDIT_BALANCE = 'ai_credit_balance'
+  AI_DAILY_USAGE = 'ai_daily_usage'
 
   EMAIL_VARIABLES = {
     SUBMITTER_INVITATION_EMAIL_KEY => %w[template.name submitter.link account.name].freeze,

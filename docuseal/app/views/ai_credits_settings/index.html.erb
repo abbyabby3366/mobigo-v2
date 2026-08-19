@@ -16,49 +16,154 @@
       </div>
     </div>
 
-    <!-- AI Credit Balance Card (Simple Provider Balance Display) -->
-    <div class="card bg-base-200 border border-base-300 shadow-sm mb-6">
+    <!-- AI Credit Balance Card (Live Provider Balance Display) -->
+    <div class="card bg-base-200 border border-base-300 shadow-sm mb-6" id="ai_credit_balance_card">
       <div class="card-body p-6">
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <div class="text-xs uppercase tracking-wider font-semibold opacity-60">
-              Current Available AI Credit Balance
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-xs uppercase tracking-wider font-semibold opacity-60">
+                Current Available AI Credit Balance
+              </span>
+              <span class="badge badge-sm badge-neutral font-mono text-[11px]">1 USD = 100 Credits</span>
+              <span class="badge badge-sm badge-primary badge-outline font-mono text-[11px]">3 Credits / Tool Call</span>
             </div>
-            <div class="text-4xl font-extrabold text-primary mt-1">
-              <% if @balance.present? %>
-                <%= number_to_currency(@balance, unit: '$') %>
-                <span class="text-sm font-normal text-base-content opacity-60">USD</span>
+            <div class="flex flex-wrap items-baseline gap-2 mt-1" id="ai_balance_display">
+              <% if @credits.present? %>
+                <div class="text-4xl font-extrabold text-primary tracking-tight" id="ai_credits_number">
+                  <%= number_with_delimiter(@credits.to_i == @credits ? @credits.to_i : sprintf('%.2f', @credits)) %>
+                </div>
+                <span class="text-lg font-bold text-primary/80">Credits</span>
               <% else %>
-                -
+                <div class="text-4xl font-extrabold text-base-content opacity-50" id="ai_credits_number">-</div>
               <% end %>
             </div>
-            <div class="text-xs opacity-70 mt-1">
-              Credit balance and token usage managed directly by your AI provider.
+            <div class="text-xs opacity-75 mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>• Tool Cost: <strong>3 Credits</strong> / AI tool call</span>
+              <span id="ai_est_calls_wrap" class="<%= @credits.present? ? '' : 'hidden' %>">
+                • Available Calls: <strong id="ai_est_calls">~<%= number_with_delimiter(((@credits || 0) / 3).to_i) %> calls</strong>
+              </span>
+            </div>
+            <div id="sync_status_toast" class="hidden mt-2 text-xs font-semibold text-success flex items-center gap-1.5 transition-all">
+              <%= svg_icon('check', class: 'w-3.5 h-3.5') rescue '' %>
+              <span id="sync_status_msg">Balance refreshed live</span>
             </div>
           </div>
 
           <div class="flex items-center gap-3">
-            <%= form_with url: check_balance_settings_ai_credits_path, method: :post, local: true do %>
-              <button type="submit" class="base-button !flex-nowrap flex-row items-center justify-center space-x-2 whitespace-nowrap !px-5">
-                <%= svg_icon('refresh', class: 'w-4 h-4 flex-shrink-0 inline-block') rescue '' %>
-                <span class="whitespace-nowrap">Check / Sync Balance</span>
-              </button>
-            <% end %>
+            <button type="button"
+                    id="sync_balance_btn"
+                    onclick="syncLiveBalance()"
+                    class="base-button !flex-nowrap flex-row items-center justify-center space-x-2 whitespace-nowrap !px-5 transition-all">
+              <span id="sync_spinner" class="hidden loading loading-spinner loading-xs"></span>
+              <span id="sync_icon"><%= svg_icon('refresh', class: 'w-4 h-4 flex-shrink-0 inline-block') rescue '' %></span>
+              <span id="sync_btn_label" class="whitespace-nowrap">Check / Sync Balance</span>
+            </button>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- AI API Credentials & Configuration Card -->
+    <!-- Recent AI Daily Usage Activity Card -->
     <div class="card bg-base-200 border border-base-300 shadow-sm mb-6">
       <div class="card-body p-6">
-        <div class="flex items-center justify-between gap-2 mb-2">
-          <h2 class="text-lg md:text-xl font-bold flex items-center gap-2">
-            <%= svg_icon('key', class: 'w-5 h-5 text-primary') rescue '' %>
-            <span>AI Provider API Credentials</span>
-          </h2>
+        <div class="flex items-center justify-between gap-2 mb-4">
+          <h2 class="text-xl font-bold">Recent API Usage & AI Activity</h2>
+          <% if @recent_transactions.present? %>
+            <%= link_to history_settings_ai_credits_path, class: 'btn btn-outline btn-sm gap-1 uppercase' do %>
+              <span>View All</span>
+              <%= svg_icon('arrow_right', class: 'w-4 h-4') rescue '' %>
+            <% end %>
+          <% end %>
+        </div>
+
+        <% if @recent_transactions.present? %>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra w-full text-sm">
+              <thead>
+                <tr class="text-xs uppercase opacity-60">
+                  <th>Date</th>
+                  <th>Document / Submitter</th>
+                  <th>Type</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% @recent_transactions.each do |tx| %>
+                  <% parsed_time = Time.zone.parse(tx['last_used_at'].to_s) rescue nil %>
+                  <% parsed_date = Date.parse(tx['date'].to_s) rescue nil %>
+                  <tr>
+                    <td class="font-mono text-xs opacity-70 whitespace-nowrap">
+                      <% if parsed_time %>
+                        <%= parsed_time.in_time_zone(current_account&.timezone || 'Singapore').strftime('%b %d, %Y %H:%M') %>
+                      <% elsif parsed_date %>
+                        <%= parsed_date.strftime('%b %d, %Y') %>
+                      <% else %>
+                        <%= tx['date'] %>
+                      <% end %>
+                    </td>
+                    <td>
+                      <div class="font-medium text-base-content">
+                        AI Document Extraction (<%= tx['tool_calls'] %> <%= 'call'.pluralize(tx['tool_calls'].to_i) %>)
+                      </div>
+                      <div class="text-xs opacity-60">
+                        <%= tx['credits'] %> Credits • <%= current_user&.email || current_account&.users&.first&.email || 'desmondgiam@gmail.com' %>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="text-xs">
+                        <div>API</div>
+                        <div>AI Extraction</div>
+                      </div>
+                    </td>
+                    <td class="font-mono font-medium text-error whitespace-nowrap">
+                      -$<%= sprintf('%.2f', tx['usd'].to_f) %> USD
+                    </td>
+                    <td>
+                      <span class="badge badge-sm badge-success text-white gap-1">
+                        <%= svg_icon('check', class: 'w-3 h-3') rescue '' %> Paid
+                      </span>
+                    </td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+          <div class="mt-4 pt-3 border-t border-base-300 text-center">
+            <%= link_to history_settings_ai_credits_path, class: 'btn btn-ghost btn-sm text-primary font-medium gap-1 uppercase' do %>
+              <span>View All Activity</span>
+              <%= svg_icon('arrow_right', class: 'w-4 h-4') rescue '' %>
+            <% end %>
+          </div>
+        <% else %>
+          <div class="text-center py-8 bg-base-100 rounded-lg border border-dashed border-base-300">
+            <%= svg_icon('sparkles', class: 'w-10 h-10 opacity-30 mx-auto mb-2 text-primary') rescue '' %>
+            <p class="font-medium opacity-80 text-sm">No AI tool usage recorded yet</p>
+            <p class="text-xs opacity-60 mt-1">Daily AI tool calls and credit usage will appear here automatically.</p>
+          </div>
+        <% end %>
+      </div>
+    </div>
+
+    <!-- AI API Credentials & Configuration Accordion (Default Collapsed) -->
+    <div class="collapse collapse-arrow bg-base-200 border border-base-300 shadow-sm rounded-2xl mb-6">
+      <input type="checkbox" />
+      <div class="collapse-title flex items-center justify-between py-4 px-6">
+        <div class="flex items-center gap-3">
+          <%= svg_icon('key', class: 'w-5 h-5 text-primary shrink-0') rescue '' %>
+          <div>
+            <h2 class="text-lg md:text-xl font-bold">AI Provider API Credentials</h2>
+            <p class="text-xs opacity-70 mt-0.5">Configure API Key, Router Endpoint URL, and AI models.</p>
+          </div>
+        </div>
+        <div class="mr-6 shrink-0 hidden sm:block">
           <span class="badge badge-outline text-xs">Provider Settings</span>
         </div>
+      </div>
+
+      <div class="collapse-content px-6 pb-6 pt-0">
+        <div class="divider mt-0 mb-4"></div>
         <p class="text-xs opacity-70 mb-4">
           Paste your AI Provider API Key below to request available balance and power AI document extractions.
         </p>
@@ -139,3 +244,57 @@
   </div>
   <div class="w-0 md:w-52"></div>
 </div>
+
+<script>
+function syncLiveBalance() {
+  const btn = document.getElementById('sync_balance_btn');
+  const spinner = document.getElementById('sync_spinner');
+  const icon = document.getElementById('sync_icon');
+  const label = document.getElementById('sync_btn_label');
+  const creditsEl = document.getElementById('ai_credits_number');
+  const usdEl = document.getElementById('ai_usd_equivalence');
+  const estCallsEl = document.getElementById('ai_est_calls');
+  const estWrap = document.getElementById('ai_est_calls_wrap');
+  const toast = document.getElementById('sync_status_toast');
+  const toastMsg = document.getElementById('sync_status_msg');
+
+  if (btn) btn.disabled = true;
+  if (spinner) spinner.classList.remove('hidden');
+  if (icon) icon.classList.add('hidden');
+  if (label) label.textContent = 'Syncing...';
+
+  const csrfToken = document.querySelector("meta[name='csrf-token']")?.getAttribute('content') || '';
+
+  fetch('<%= check_balance_settings_ai_credits_path %>', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'X-CSRF-Token': csrfToken
+    }
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data && data.credits !== undefined) {
+      if (creditsEl) creditsEl.textContent = Number(data.credits).toLocaleString();
+      if (estCallsEl) estCallsEl.textContent = `~${Number(data.est_calls).toLocaleString()} calls`;
+      if (estWrap) estWrap.classList.remove('hidden');
+
+      if (toast && toastMsg) {
+        toastMsg.textContent = data.message || 'Live balance synced successfully';
+        toast.classList.remove('hidden');
+        setTimeout(() => { toast.classList.add('hidden'); }, 4000);
+      }
+    }
+  })
+  .catch(err => {
+    console.error('Error syncing AI balance:', err);
+  })
+  .finally(() => {
+    if (btn) btn.disabled = false;
+    if (spinner) spinner.classList.add('hidden');
+    if (icon) icon.classList.remove('hidden');
+    if (label) label.textContent = 'Check / Sync Balance';
+  });
+}
+</script>

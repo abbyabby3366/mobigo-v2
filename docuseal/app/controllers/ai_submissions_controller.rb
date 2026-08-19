@@ -36,6 +36,13 @@ class AiSubmissionsController < ApplicationController
   end
 
   def extract
+    acc = current_account || @template&.account
+    if acc.present? && !AiCredit.sufficient_credits?(acc, AiCredit::CREDITS_PER_TOOL_CALL)
+      return render json: {
+        error: "Insufficient AI credit balance (#{AiCredit.credits(acc).to_i} Credits left). Each AI extraction requires 3 Credits. Please sync or top up credits at /settings/ai_credits."
+      }, status: :unprocessable_entity
+    end
+
     text_data = params[:text].to_s
     files_data = params[:files] || []
 
@@ -46,7 +53,8 @@ class AiSubmissionsController < ApplicationController
     result = AiSubmissionExtractor.call(
       template: @template,
       text: text_data,
-      files: files_data
+      files: files_data,
+      account: acc
     )
 
     if result[:success]
