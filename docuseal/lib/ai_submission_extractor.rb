@@ -83,7 +83,7 @@ module AiSubmissionExtractor
     cur_date_str = current_time.strftime('%Y-%m-%d')
 
     system_instructions = <<~INSTRUCTIONS
-      You are an expert AI document processing assistant specializing in extracting structured RAW DATA from customer identity documents (e.g. Malaysian MyKad / Kad Pengenalan), calculator screenshots, device box labels (IMEI, Serial Number), and customer WhatsApp/order notes for equipment/phone rental agreements (e.g. PERJANJIAN PERKHIDMATAN SEWA, Mobigo).
+      You are an expert AI document processing assistant specializing in extracting structured RAW DATA from customer identity documents (e.g. Malaysian MyKad / Kad Pengenalan, International Passport), calculator screenshots, device box labels (IMEI, Serial Number), and customer WhatsApp/order notes for equipment/phone rental agreements (e.g. PERJANJIAN PERKHIDMATAN SEWA, Mobigo).
 
       The target document template is: "#{template.name}".
 
@@ -98,11 +98,11 @@ module AiSubmissionExtractor
 
       DOMAIN-SPECIFIC RAW EXTRACTION RULES & FIELD MAPPING GUIDANCE:
       1. Contact & Identity Information:
-         - Customer / Recipient Full Name ("Nama", "Nama Penerima", "Pihak B", "Name"): Extract from MyKad IC photo or text notes (e.g. MOHAMMAD FAIZ BIN MOHD KHATIP).
-         - IC / Identity Card Number ("No. Kad Pengenalan", "No. KP", "IC", "NRIC"): Extract from MyKad image (e.g. 890425-02-5957).
+         - Customer / Recipient Full Name ("Nama", "Nama Penerima", "Pihak B", "Name"): Extract from MyKad IC photo, Passport photo/page, or text notes (e.g. MOHAMMAD FAIZ BIN MOHD KHATIP).
+         - IC / Identity Card Number / Passport Number ("No. Kad Pengenalan", "No. KP", "IC", "NRIC", "No Kad Pengenalan", "Passport", "No. Passport"): Extract IC number from MyKad image OR Passport number from Passport document/photo or text notes (e.g. 890425-02-5957 or A12345678). If customer provides a Passport instead of MyKad/IC, ALWAYS place the extracted Passport Number into the "No. Kad Pengenalan" / "No Kad Pengenalan" / "No. KP" / "IC" / "NRIC" field.
          - Phone Number ("Nombor Telefon", "No. Tel", "Mobile"): Extract from WhatsApp/order text (e.g. 01153565717).
          - Email Address ("E-mel", "Email"): Extract from WhatsApp/order text (e.g. mohdfaiz5957@gmail.com).
-         - Address ("Alamat", "Alamat Penghantaran", "Address"): Extract full residential or delivery address from MyKad or text notes.
+         - Address ("Alamat", "Alamat Penghantaran", "Address"): Extract full residential or delivery address from MyKad, Passport, utility bill, or text notes.
          - Branch / Cawangan Name ("branch_name", "Branch Name", "branch", "Cawangan", "cawangan", "Nama Cawangan"): Extract branch name from notes or text if provided (e.g. "branch name: ABC Holdings" -> "ABC Holdings"). Put in fields["branch_name"].
 
       2. Device & Product Information:
@@ -386,11 +386,20 @@ module AiSubmissionExtractor
     'Nama Penerima' => 'Recipient Name',
     'Nama Penerima ("Pihak B")' => 'Recipient Name',
     'Full Name' => 'Full Name',
-    'No Kad Pengenalan' => 'IC / MyKad Number',
-    'No. Kad Pengenalan' => 'IC / MyKad Number',
-    'No KP' => 'IC / MyKad Number',
-    'No. KP' => 'IC / MyKad Number',
-    'Nombor Kad Pengenalan' => 'IC / MyKad Number',
+    'No Kad Pengenalan' => 'IC / Passport Number',
+    'No. Kad Pengenalan' => 'IC / Passport Number',
+    'No KP' => 'IC / Passport Number',
+    'No. KP' => 'IC / Passport Number',
+    'Nombor Kad Pengenalan' => 'IC / Passport Number',
+    'IC' => 'IC / Passport Number',
+    'NRIC' => 'IC / Passport Number',
+    'Passport' => 'Passport Number',
+    'No. Passport' => 'Passport Number',
+    'No Passport' => 'Passport Number',
+    'Passport Number' => 'Passport Number',
+    'Pasport' => 'Passport Number',
+    'No Pasport' => 'Passport Number',
+    'No. Pasport' => 'Passport Number',
     'Nombor Telefon' => 'Recipient Phone Number',
     'Nombor Telefon ("Pihak B")' => 'Recipient Phone Number',
     'No Telefon' => 'Recipient Phone Number',
@@ -452,6 +461,18 @@ module AiSubmissionExtractor
     'Name' => 'signer_name',
     'No Kad Pengenalan' => 'ic_number',
     'No. Kad Pengenalan' => 'ic_number',
+    'No KP' => 'ic_number',
+    'No. KP' => 'ic_number',
+    'Nombor Kad Pengenalan' => 'ic_number',
+    'IC' => 'ic_number',
+    'NRIC' => 'ic_number',
+    'Passport' => 'ic_number',
+    'No. Passport' => 'ic_number',
+    'No Passport' => 'ic_number',
+    'Passport Number' => 'ic_number',
+    'Pasport' => 'ic_number',
+    'No Pasport' => 'ic_number',
+    'No. Pasport' => 'ic_number',
     'Date' => 'agreement_date',
     'Tarikh' => 'agreement_date',
     'Tarikh Penerimaan' => 'receipt_date',
@@ -529,8 +550,8 @@ module AiSubmissionExtractor
       'Product / Market Price'
     when /harga/i
       'Price / Amount'
-    when /kad.*pengenalan|no.*kp|ic.*number|mykad|nric/i
-      'IC / MyKad Number'
+    when /kad.*pengenalan|no.*kp|ic.*number|mykad|nric|passport|pasport/i
+      'IC / Passport Number'
     when /telefon|phone|mobile|tel\b/i
       'Recipient Phone Number'
     when /alamat.*hantar|delivery.*address/i
@@ -821,8 +842,8 @@ module AiSubmissionExtractor
           val = raw_fields['delivery_address'] || raw_fields['address'] || raw_fields['alamat'] || raw_fields['alamat_penghantaran']
         when 'Email'
           val = raw_fields['recipient_email'] || raw_fields['email'] || raw_fields['e_mel'] || raw_fields['emel']
-        when 'No Kad Pengenalan'
-          val = raw_fields['ic_number'] || raw_fields['ic'] || raw_fields['mykad'] || raw_fields['nric'] || raw_fields['no_kp'] || raw_fields['no_kad_pengenalan']
+        when 'No Kad Pengenalan', 'No. Kad Pengenalan', 'No KP', 'No. KP', 'Nombor Kad Pengenalan', 'IC', 'NRIC', 'Passport', 'No. Passport', 'No Passport'
+          val = raw_fields['ic_number'] || raw_fields['ic'] || raw_fields['mykad'] || raw_fields['nric'] || raw_fields['no_kp'] || raw_fields['no_kad_pengenalan'] || raw_fields['nombor_kad_pengenalan'] || raw_fields['passport'] || raw_fields['passport_number'] || raw_fields['no_passport'] || raw_fields['pasport'] || raw_fields['no_pasport']
         when 'Name'
           val = raw_fields['full_name'] || raw_fields['recipient_name'] || raw_fields['name'] || raw_fields['nama'] || raw_fields['nama_penerima']
         end
