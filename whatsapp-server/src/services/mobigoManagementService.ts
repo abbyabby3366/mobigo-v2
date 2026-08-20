@@ -252,7 +252,7 @@ export class MobigoManagementService {
     ].join('\n');
 
     // Send to configured notification phone only if set in .env
-    const notifyPhone = process.env.WHATSAPP_NOTIFY_PHONE || process.env.ADMIN_NOTIFY_PHONE;
+    const notifyPhone = process.env.WHATSAPP_NOTIFY_PHONE;
     if (notifyPhone) {
       await this.sendExternalWhatsApp(notifyPhone, message);
     } else {

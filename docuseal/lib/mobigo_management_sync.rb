@@ -113,8 +113,7 @@ module MobigoManagementSync
     ].join("\n")
 
     # Send to configured notification phone only if set in .env
-    notify_phone = read_env_value('WHATSAPP_NOTIFY_PHONE').presence ||
-                   read_env_value('ADMIN_NOTIFY_PHONE').presence
+    notify_phone = read_env_value('WHATSAPP_NOTIFY_PHONE').presence
 
     if notify_phone.present?
       send_whatsapp_message(notify_phone, whatsapp_text)
