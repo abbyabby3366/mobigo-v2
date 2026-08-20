@@ -14,6 +14,7 @@ export interface DocuSealSubmitter {
 export interface CreateSubmissionParams {
   name?: string;
   template_id?: number | string;
+  source?: string;
   send_email?: boolean;
   send_sms?: boolean;
   submitters: DocuSealSubmitter[];
@@ -73,9 +74,13 @@ export class DocuSealService {
    * Create a new submission from template or with documents
    */
   async createSubmission(params: CreateSubmissionParams): Promise<any> {
+    const payload = {
+      source: 'whatsapp',
+      ...params,
+    };
     const url = `${this.getApiUrl()}/api/submissions`;
     try {
-      const response = await axios.post(url, params, {
+      const response = await axios.post(url, payload, {
         headers: this.getHeaders(),
         timeout: 30000,
       });
@@ -85,7 +90,7 @@ export class DocuSealService {
       if (err.response?.status === 404) {
         const altUrl = `${this.getApiUrl()}/submissions`;
         try {
-          const altRes = await axios.post(altUrl, params, {
+          const altRes = await axios.post(altUrl, payload, {
             headers: this.getHeaders(),
             timeout: 30000,
           });

@@ -203,6 +203,27 @@ module Billing
     scope.order(completed_at: :desc, id: :desc)
   end
 
+  def transaction_channel(tx)
+    return nil if tx.nil?
+
+    src = (tx.source.presence || tx.submission&.source)&.downcase
+    return nil if src.blank?
+
+    if src == 'whatsapp'
+      'WhatsApp'
+    elsif src.in?(%w[invite link embed bulk dashboard portal web manual form])
+      'Portal'
+    elsif src == 'api'
+      if tx.submitter&.phone.present? || tx.submission&.name.to_s.downcase.include?('whatsapp')
+        'WhatsApp'
+      else
+        'API'
+      end
+    else
+      nil
+    end
+  end
+
   def generate_csv(transactions, timezone = 'Singapore')
     require 'csv'
 
@@ -213,9 +234,16 @@ module Billing
         date = (tx.completed_at || tx.created_at)&.in_time_zone(timezone)&.strftime('%b %d, %Y %H:%M')
         submission_name = tx.submission&.name.presence || "Submission ##{tx.submission_id}"
         submitter_email = tx.submitter&.email || tx.submitter&.name || "Submitter ##{tx.submitter_id}"
+        channel = transaction_channel(tx)
+        type_label = case channel
+                     when 'WhatsApp' then 'WhatsApp API eSignature'
+                     when 'Portal'   then 'Portal API eSignature'
+                     when 'API'      then 'API eSignature'
+                     else ''
+                     end
         amount = "-$#{sprintf('%.2f', PRICE_PER_SIGNATURE)} USD"
 
-        csv << [date, tx.submission_id, submission_name, submitter_email, 'API Signature', amount, 'Paid']
+        csv << [date, tx.submission_id, submission_name, submitter_email, type_label, amount, 'Paid']
       end
     end
   end

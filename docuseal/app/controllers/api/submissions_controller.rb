@@ -217,12 +217,13 @@ module Api
 
     def create_submissions(template, params)
       is_send_email = !params[:send_email].in?(['false', false])
+      req_source = (params[:source].presence || params.dig(:submission, :source).presence || :api).to_sym
 
       if (emails = (params[:emails] || params[:email]).presence) &&
          params[:submission].blank? && params[:submitters].blank?
         Submissions.create_from_emails(template:,
                                        user: current_user,
-                                       source: :api,
+                                       source: req_source,
                                        mark_as_sent: is_send_email,
                                        emails:,
                                        params:)
@@ -233,7 +234,7 @@ module Api
         submissions = Submissions.create_from_submitters(
           template:,
           user: current_user,
-          source: :api,
+          source: req_source,
           submitters_order: params[:submitters_order] || params[:order] || 'preserved',
           submissions_attrs:,
           params:
@@ -257,7 +258,7 @@ module Api
     def submissions_params
       permitted_attrs = [
         :send_email, :send_sms, :bcc_completed, :completed_redirect_url, :reply_to, :go_to_last,
-        :require_phone_2fa, :require_email_2fa, :expire_at, :name,
+        :require_phone_2fa, :require_email_2fa, :expire_at, :name, :source,
         {
           variables: {},
           message: %i[subject body],

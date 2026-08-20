@@ -87,7 +87,20 @@
                       </div>
                     </td>
                     <td>
-                      <span class="badge badge-sm badge-ghost">API Signature</span>
+                      <% channel = Billing.transaction_channel(tx) %>
+                      <% if channel == 'WhatsApp' %>
+                        <span class="badge badge-sm badge-success badge-outline font-medium whitespace-nowrap">
+                          WhatsApp API eSignature
+                        </span>
+                      <% elsif channel == 'Portal' %>
+                        <span class="badge badge-sm badge-info badge-outline font-medium whitespace-nowrap">
+                          Portal API eSignature
+                        </span>
+                      <% elsif channel == 'API' %>
+                        <span class="badge badge-sm badge-neutral badge-outline font-medium whitespace-nowrap">
+                          API eSignature
+                        </span>
+                      <% end %>
                     </td>
                     <td class="font-mono font-medium text-error whitespace-nowrap">
                       -$<%= sprintf('%.2f', Billing::PRICE_PER_SIGNATURE) %> USD
