@@ -12,6 +12,10 @@ import { MessageStore } from './services/messageStore.js';
 import { AgentWorkflowService } from './services/agentWorkflowService.js';
 import { renderDashboardHtml } from './views/dashboardHtml.js';
 
+// Load root directory .env first (mobigo-v2/.env)
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 dotenv.config();
 
 const app = express();

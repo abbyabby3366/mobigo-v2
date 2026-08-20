@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { sendTextMessage, sendDocumentMessage } from '../services/baileysManager.js';
+import { MobigoManagementService } from '../services/mobigoManagementService.js';
 
 const router = Router();
 const DEFAULT_SESSION_ID = process.env.DEFAULT_SESSION_ID || 'mobigo_main';
@@ -14,6 +15,9 @@ router.post('/docuseal', async (req: Request, res: Response) => {
   console.log(`[DocuSeal Webhook] Received event: ${eventType}`);
 
   if (eventType === 'form.completed' || eventType === 'submission.completed') {
+    // 1. Asynchronously forward signed document record to Mobigo Management
+    void MobigoManagementService.sendCompletedWebhook(payload);
+
     const data = payload.data || payload;
     const submitter = data.submitters?.[0] || data.submitter;
     const phone = submitter?.phone || data.phone;

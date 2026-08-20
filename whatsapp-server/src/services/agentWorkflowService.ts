@@ -2,6 +2,7 @@ import { BufferJSON } from 'baileys';
 import { getRedisClient, formatRedisKey } from './redisAuthState.js';
 import { MobigoAiService, ExtractedDocumentData, BufferedFile } from './mobigoAiService.js';
 import { docusealService } from './docusealService.js';
+import { MobigoManagementService } from './mobigoManagementService.js';
 import { sendTextMessage } from './baileysManager.js';
 import { LidPhoneMapper } from './lidPhoneMapper.js';
 
