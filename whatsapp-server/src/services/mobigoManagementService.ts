@@ -189,7 +189,35 @@ export class MobigoManagementService {
     const apiKey = this.getApiKey();
     const endpoint = `${baseUrl}/api/v1/applications`;
 
-    console.log(`[MobigoManagementService] Forwarding completed signing webhook to -> POST ${endpoint}`);
+    // Extract branch name from payload if present
+    const envelope = rawWebhookPayload?.data || rawWebhookPayload || {};
+    const submitter = envelope.submitters?.[0] || envelope.submitter || {};
+    const rawValues = envelope.values || submitter.values || [];
+    let extractedBranch = envelope.branch_name || envelope.dealerName || submitter.branch_name;
+
+    if (!extractedBranch && Array.isArray(rawValues)) {
+      const match = rawValues.find(
+        (v: any) => v && ['Branch Name', 'branch_name', 'Branch', 'Cawangan', 'cawangan'].includes(v.field || v.name)
+      );
+      if (match?.value) extractedBranch = String(match.value).trim();
+    }
+
+    if (!extractedBranch && (envelope.name || submitter.submission_name || envelope.submission?.name)) {
+      const title = String(envelope.name || submitter.submission_name || envelope.submission?.name || '');
+      const m = title.match(/\(([^)]+)\)$/);
+      if (m) extractedBranch = m[1].trim();
+    }
+
+    if (extractedBranch) {
+      envelope.branch_name = extractedBranch;
+      envelope.dealerName = extractedBranch;
+      if (envelope.data && typeof envelope.data === 'object') {
+        envelope.data.branch_name = extractedBranch;
+        envelope.data.dealerName = extractedBranch;
+      }
+    }
+
+    console.log(`[MobigoManagementService] Forwarding completed signing webhook to -> POST ${endpoint} (Branch: ${extractedBranch || 'N/A'})`);
 
     try {
       const response = await axios.post<CreateMobigoApplicationResponse>(endpoint, rawWebhookPayload, {
@@ -207,7 +235,7 @@ export class MobigoManagementService {
 
       const appNum = response.data?.data?.applicationNumber;
       const statusText = `✅ *MobiGo Management:* Recorded as *${appNum}* (${baseUrl})`;
-      await this.notifyWhatsAppCompleted(rawWebhookPayload, statusText);
+      await this.notifyWhatsAppCompleted(rawWebhookPayload, statusText, extractedBranch);
 
       return response.data;
     } catch (err: any) {
@@ -219,7 +247,7 @@ export class MobigoManagementService {
       console.error(`[MobigoManagementService] Error recording signed application:`, errMsg);
 
       const statusText = `⚠️ *MobiGo Management Status:* Error - ${errMsg}`;
-      await this.notifyWhatsAppCompleted(rawWebhookPayload, statusText);
+      await this.notifyWhatsAppCompleted(rawWebhookPayload, statusText, extractedBranch);
 
       return {
         success: false,
@@ -231,7 +259,7 @@ export class MobigoManagementService {
   /**
    * Helper to format and send WhatsApp notification via https://deswa.io7.my/api/external/send-message
    */
-  private static async notifyWhatsAppCompleted(rawPayload: any, mobigoStatusText: string): Promise<void> {
+  private static async notifyWhatsAppCompleted(rawPayload: any, mobigoStatusText: string, branchName?: string): Promise<void> {
     const envelope = rawPayload?.data || rawPayload || {};
     const submitter = envelope.submitters?.[0] || envelope.submitter || {};
     const phone = submitter.phone || envelope.phone;
@@ -239,17 +267,20 @@ export class MobigoManagementService {
     const docName = envelope.name || 'Document Agreement';
     const subId = envelope.id || submitter.submission_id || 'OK';
 
-    const message = [
+    const messageLines = [
       '🎉 *Document Signed & Completed!*',
       '━━━━━━━━━━━━━━━━━━━━━━━',
       `📄 *Document:* ${docName}`,
       `👤 *Customer:* ${custName}`,
+      branchName ? `🏢 *Branch:* ${branchName}` : null,
       `🆔 *Submission ID:* #${subId}`,
       '',
       mobigoStatusText,
       '━━━━━━━━━━━━━━━━━━━━━━━',
       '_Thank you for choosing Mobigo!_'
-    ].join('\n');
+    ].filter(Boolean);
+
+    const message = messageLines.join('\n');
 
     // Send to configured notification phone only if set in .env
     const notifyPhone = process.env.WHATSAPP_NOTIFY_PHONE;

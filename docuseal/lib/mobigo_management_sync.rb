@@ -53,11 +53,35 @@ module MobigoManagementSync
       return false
     end
 
+    # Extract branch name from values, variables, or submission title
+    raw_sub_values = submitter.values.is_a?(Hash) ? submitter.values : {}
+    branch_name = raw_sub_values['branch_name'].presence ||
+                  raw_sub_values['Branch Name'].presence ||
+                  raw_sub_values['cawangan'].presence ||
+                  raw_sub_values['branch'].presence ||
+                  (submitter.submission&.variables.is_a?(Hash) && submitter.submission.variables['branch_name'].presence) ||
+                  (submitter.submission&.name.to_s =~ /\(([^)]+)\)$/ ? Regexp.last_match(1).to_s.strip.presence : nil)
+
     api_url = read_env_value('MOBIGO_MANAGEMENT_API_URL').presence || 'https://mobigomanagement.onrender.com'
     api_key = read_env_value('MOBIGO_MANAGEMENT_API_KEY').presence || 'mbg_live_19e8ff22ff54e4a7996b5f87c0b7e2e3e07c8a2285cea05d'
 
     endpoint = "#{api_url.chomp('/')}/api/v1/applications"
     serialized_data = Submitters::SerializeForWebhook.call(submitter)
+
+    if branch_name.present?
+      serialized_data['branch_name'] = branch_name
+      serialized_data['dealerName'] = branch_name
+      serialized_data['cawangan'] = branch_name
+
+      # Ensure it is present in values array if not already present
+      if serialized_data['values'].is_a?(Array)
+        has_branch_field = serialized_data['values'].any? do |v|
+          v.is_a?(Hash) && ['Branch Name', 'branch_name', 'Branch', 'Cawangan', 'cawangan'].include?(v['field'])
+        end
+        serialized_data['values'] << { 'field' => 'Branch Name', 'value' => branch_name } unless has_branch_field
+      end
+    end
+
     payload = {
       event_type: 'submission.completed',
       timestamp: Time.current.iso8601,
@@ -86,7 +110,7 @@ module MobigoManagementSync
       if res.code.to_i.between?(200, 299) && res_json['success']
         app_number = res_json.dig('data', 'applicationNumber') || 'Registered'
         mobigo_status = "✅ *MobiGo Management:* Recorded as #{app_number} (#{api_url})"
-        Rails.logger.info("[MobigoSync] Synced completed submission #{submitter.submission_id}: #{app_number}")
+        Rails.logger.info("[MobigoSync] Synced completed submission #{submitter.submission_id}: #{app_number} (Branch: #{branch_name || 'N/A'})")
       else
         err_msg = res_json['message'] || res_json['error'] || res.body
         mobigo_status = "⚠️ *MobiGo Management Status:* Error (#{res.code}) - #{err_msg}"
@@ -100,17 +124,20 @@ module MobigoManagementSync
     # Send WhatsApp notification via https://deswa.io7.my/api/external/send-message
     cust_name = submitter.name || 'Customer'
 
-    whatsapp_text = [
+    whatsapp_lines = [
       "🎉 *Phone Rental Agreement Signed & Completed!*",
       "━━━━━━━━━━━━━━━━━━━━━━━",
       "📄 *Document:* #{doc_name}",
       "👤 *Customer:* #{cust_name}",
+      (branch_name.present? ? "🏢 *Branch:* #{branch_name}" : nil),
       "🆔 *Submission ID:* ##{submitter.submission_id}",
       "",
       mobigo_status,
       "━━━━━━━━━━━━━━━━━━━━━━━",
       "_Thank you for choosing Mobigo!_"
-    ].join("\n")
+    ].compact
+
+    whatsapp_text = whatsapp_lines.join("\n")
 
     # Send to configured notification phone only if set in .env
     notify_phone = read_env_value('WHATSAPP_NOTIFY_PHONE').presence
