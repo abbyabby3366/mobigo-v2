@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import sessionRoutes from './routes/sessionRoutes.js';
 import messageRoutes from './routes/messageRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
@@ -11,6 +12,9 @@ import { SessionStore } from './services/sessionStore.js';
 import { MessageStore } from './services/messageStore.js';
 import { AgentWorkflowService } from './services/agentWorkflowService.js';
 import { renderDashboardHtml } from './views/dashboardHtml.js';
+
+// ESM equivalent of __dirname
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Load root directory .env first (mobigo-v2/.env)
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
