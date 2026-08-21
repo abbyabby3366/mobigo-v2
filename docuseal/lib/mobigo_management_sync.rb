@@ -82,11 +82,23 @@ module MobigoManagementSync
       end
     end
 
+    # Build flat dictionary of all raw form fields
+    raw_fields = {}
+    if serialized_data['values'].is_a?(Array)
+      serialized_data['values'].each do |item|
+        next unless item.is_a?(Hash)
+        k = item['field'] || item['name']
+        raw_fields[k] = item['value'] if k.present?
+      end
+    end
+
+    # Standardized normalized structure
+    standardized_payload = build_standardized_payload(submitter, serialized_data, raw_fields, branch_name, doc_name)
+
     payload = {
-      event_type: 'submission.completed',
-      timestamp: Time.current.iso8601,
-      data: serialized_data
-    }
+      'event_type' => 'submission.completed',
+      'timestamp' => Time.current.iso8601
+    }.merge(standardized_payload).merge('data' => serialized_data)
 
     mobigo_status = ''
     app_number = nil
@@ -184,5 +196,165 @@ module MobigoManagementSync
   rescue StandardError => e
     Rails.logger.warn("[WhatsApp API] Failed sending to #{clean_num}: #{e.message}")
     false
+  end
+
+  def find_field_val(raw_fields, *keys)
+    keys.each do |k|
+      return raw_fields[k] if raw_fields[k].present?
+    end
+    nil
+  end
+
+  def parse_numeric(val)
+    return nil if val.blank?
+    num_str = val.to_s.gsub(/[^0-9.]/, '')
+    f = num_str.to_f
+    f > 0 ? f : nil
+  end
+
+  def detect_brand(prod_name)
+    name_lower = prod_name.to_s.downcase
+    if name_lower.include?('iphone') || name_lower.include?('apple') || name_lower.include?('ipad')
+      'Apple'
+    elsif name_lower.include?('samsung') || name_lower.include?('galaxy')
+      'Samsung'
+    elsif name_lower.include?('xiaomi') || name_lower.include?('redmi')
+      'Xiaomi'
+    elsif name_lower.include?('vivo')
+      'Vivo'
+    elsif name_lower.include?('oppo')
+      'Oppo'
+    elsif name_lower.include?('honor')
+      'Honor'
+    elsif name_lower.include?('huawei')
+      'Huawei'
+    else
+      'Mobile'
+    end
+  end
+
+  def build_standardized_payload(submitter, serialized_data, raw_fields, branch_name, doc_name)
+    # 1. Customer details
+    cust_name = find_field_val(raw_fields, 'Full Name', 'Nama', 'Nama Penuh', 'Name', 'Customer Name', 'Nama Pemohon') ||
+                submitter.name || 'Customer'
+
+    raw_ic = find_field_val(raw_fields, 'IC Number', 'No Kad Pengenalan', 'No. Kad Pengenalan', 'IC', 'No. KP', 'No KP', 'Nombor Kad Pengenalan') || ''
+    raw_passport = find_field_val(raw_fields, 'Passport Number', 'No Passport', 'Passport') || ''
+    
+    is_passport = raw_passport.present? || (raw_ic.present? && raw_ic.match?(/^[A-Za-z]/) && raw_ic.length < 12)
+    ic_val = !is_passport && raw_ic.present? ? raw_ic.strip : nil
+    passport_val = is_passport ? (raw_passport.presence || raw_ic).strip : nil
+
+    phone_val = find_field_val(raw_fields, 'Phone Number', 'Nombor Telefon', 'No. Tel', 'No Tel', 'Phone', 'Telefon') ||
+                submitter.phone || '+60120000000'
+
+    email_val = find_field_val(raw_fields, 'Email', 'Email Address', 'Alamat Emel') || submitter.email
+
+    home_address = find_field_val(raw_fields, 'Home Address', 'Address', 'Alamat', 'Alamat Rumah', 'Alamat Penghantaran')
+    city = find_field_val(raw_fields, 'City', 'Bandar')
+    state = find_field_val(raw_fields, 'State', 'Negeri')
+    postcode = find_field_val(raw_fields, 'Postcode', 'Poskod')
+
+    if home_address.present?
+      postcode ||= home_address[/\b(\d{5})\b/, 1]
+      
+      states = ['Johor', 'Selangor', 'Kuala Lumpur', 'Penang', 'Pulau Pinang', 'Perak', 'Kedah', 'Melaka', 'Negeri Sembilan', 'Pahang', 'Terengganu', 'Kelantan', 'Sabah', 'Sarawak', 'Perlis', 'Putrajaya', 'Labuan']
+      matched_state = states.find { |s| home_address.downcase.include?(s.downcase) }
+      state ||= matched_state
+
+      if postcode.present? && city.blank?
+        # Extract word after postcode as city candidate
+        stop_pattern = matched_state ? Regexp.escape(matched_state) : nil
+        city_regex = stop_pattern ? /\b#{postcode}\s+([A-Za-z\s]+?)(?:,\s*|#{stop_pattern}|$)/i : /\b#{postcode}\s+([A-Za-z\s]+?)(?:,\s*|$)/i
+        if home_address =~ city_regex
+          city_cand = Regexp.last_match(1).to_s.strip
+          city = city_cand unless city_cand.blank?
+        end
+      end
+    end
+
+    # 2. Product details
+    prod_name = find_field_val(raw_fields, 'Product Name', 'Nama Produk', 'Product', 'Model', 'Peranti') || 'Phone Rental Device'
+    brand = find_field_val(raw_fields, 'Brand', 'Jenama') || detect_brand(prod_name)
+    model = find_field_val(raw_fields, 'Model', 'Model Telefon') || prod_name
+    imei = find_field_val(raw_fields, 'IMEI', 'Nombor IMEI', 'Serial Number', 'IMEI / Serial Number', 'No Siri', 'Nombor Siri')
+
+    unit_price = parse_numeric(find_field_val(raw_fields, 'Product Price', 'Harga Produk', 'Price', 'Device Price', 'Unit Price')) || 1.0
+
+    # 3. Rental / Financing details
+    monthly_rent = parse_numeric(find_field_val(raw_fields, 'Monthly Rental', 'Monthly Rent', 'Harga Sewa Sebulan', 'Sewa Bulanan', 'Bayaran Bulanan')) || 0.0
+    duration_months = parse_numeric(find_field_val(raw_fields, 'Rental Duration (Months)', 'Jumlah Tempoh Sewaan', 'Duration', 'Tempoh', 'Tenure'))&.to_i || 24
+    deposit = parse_numeric(find_field_val(raw_fields, 'Deposit', 'Deposit Amount', 'Deposit Produk', 'Cagaran')) || 0.0
+    total_repayment = parse_numeric(find_field_val(raw_fields, 'Total Rent', 'Total Repayment', 'Jumlah Sewa', 'Jumlah Sewaan')) || (monthly_rent * duration_months)
+
+    # 4. Emergency contact
+    emergency_name = find_field_val(raw_fields, 'Emergency Contact Name', 'Emergency Name', 'Nama Waris', 'Nama Kecemasan')
+    emergency_phone = find_field_val(raw_fields, 'Emergency Contact Phone', 'Emergency Phone', 'No Tel Waris', 'No. Tel Waris')
+    emergency_rel = find_field_val(raw_fields, 'Emergency Relationship', 'Relationship', 'Hubungan') || 'Guarantor'
+
+    # 5. Employment
+    employer_name = find_field_val(raw_fields, 'Employer Name', 'Company Name', 'Nama Majikan', 'Nama Syarikat')
+    occupation = find_field_val(raw_fields, 'Occupation', 'Pekerjaan', 'Jawatan')
+    monthly_salary = parse_numeric(find_field_val(raw_fields, 'Monthly Salary', 'Salary', 'Gaji Bulanan', 'Pendapatan'))
+
+    # 6. Signed Documents
+    signed_doc_url = serialized_data.dig('documents', 0, 'url') || serialized_data['audit_log_url']
+    audit_log_url = serialized_data['audit_log_url'] || serialized_data.dig('submission', 'audit_log_url')
+
+    {
+      'submission' => {
+        'id' => submitter.submission_id,
+        'status' => 'completed',
+        'template_name' => doc_name,
+        'completed_at' => (submitter.completed_at || Time.current).iso8601,
+        'submission_url' => serialized_data['submission_url'],
+        'signed_document_url' => signed_doc_url,
+        'audit_log_url' => audit_log_url
+      },
+      'branch' => {
+        'name' => branch_name.presence || 'DocuSeal System',
+        'dealer_name' => branch_name.presence || 'DocuSeal System'
+      },
+      'customer' => {
+        'fullName' => cust_name.to_s.strip,
+        'icNumber' => ic_val,
+        'passportNumber' => passport_val,
+        'nationality' => is_passport ? 'International' : 'Malaysian',
+        'phoneNumber' => phone_val.to_s.strip,
+        'email' => email_val.presence,
+        'homeAddress' => home_address.presence,
+        'city' => city.presence,
+        'state' => state.presence,
+        'postcode' => postcode.presence
+      },
+      'product' => {
+        'category' => 'Smartphone',
+        'brand' => brand,
+        'name' => prod_name.to_s.strip,
+        'model' => model.to_s.strip,
+        'serialNumber' => imei.presence,
+        'unitPrice' => unit_price,
+        'quantity' => 1
+      },
+      'rental_financing' => {
+        'monthlyInstallment' => monthly_rent,
+        'financingPeriodMonths' => duration_months,
+        'depositAmount' => deposit,
+        'totalRepayment' => total_repayment,
+        'remarks' => "DocuSeal Submission ##{submitter.submission_id} · #{doc_name}"
+      },
+      'emergencyContact' => emergency_name.present? && emergency_phone.present? ? {
+        'fullName' => emergency_name.to_s.strip,
+        'relationship' => emergency_rel.to_s.strip,
+        'phoneNumber' => emergency_phone.to_s.strip
+      } : nil,
+      'employment' => employer_name.present? || occupation.present? || monthly_salary.to_f > 0 ? {
+        'employerName' => employer_name.presence,
+        'occupation' => occupation.presence,
+        'employmentStatus' => 'Employed',
+        'monthlySalary' => monthly_salary
+      } : nil,
+      'raw_fields' => raw_fields
+    }
   end
 end
