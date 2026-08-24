@@ -108,12 +108,13 @@ module Api
                     Billing.record_invoice!(
                       account,
                       amount: diff,
-                      method: 'API',
+                      method: params[:method].presence || 'API',
                       description: params[:description].presence || 'API Balance Adjustment (Credit)',
                       user: current_user,
                       reference: params[:reference],
                       previous_balance: previous_balance,
-                      new_balance: target_balance
+                      new_balance: target_balance,
+                      date: params[:date]
                     )
                   end
 
@@ -140,10 +141,11 @@ module Api
         result = Billing.top_up!(
           account,
           amount,
-          method: 'API',
+          method: params[:method].presence || 'API',
           description: params[:description].presence || 'API Balance Top-Up',
           user: current_user,
-          reference: params[:reference]
+          reference: params[:reference],
+          date: params[:date]
         )
 
         render json: {
@@ -203,12 +205,13 @@ module Api
                   Billing.record_invoice!(
                     account,
                     amount: diff,
-                    method: 'API',
+                    method: params[:method].presence || 'API',
                     description: params[:description].presence || 'API Balance Adjustment (Credit)',
                     user: current_user,
                     reference: params[:reference],
                     previous_balance: previous_balance,
-                    new_balance: target_balance
+                    new_balance: target_balance,
+                    date: params[:date]
                   )
                 end
 

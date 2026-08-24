@@ -20,7 +20,7 @@
           <span class="join-item btn btn-disabled !bg-base-200 min-h-full h-10">«</span>
         <% end %>
         <span class="join-item btn font-medium uppercase min-h-full h-10">
-          <%= t('page_number', number: pagy.page) %>
+          <%= t('page_number', number: pagy.page, total: pagy.pages, pages: pagy.pages) %>
         </span>
         <% if local_assigns[:next_page_path].present? %>
           <%= link_to '»', local_assigns[:next_page_path], class: 'join-item btn min-h-full h-10' %>

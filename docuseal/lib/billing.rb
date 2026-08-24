@@ -42,7 +42,7 @@ module Billing
     check_and_notify_low_balance!(account, current, new_balance)
   end
 
-  def top_up!(account, amount, method: 'API', description: nil, user: nil, reference: nil)
+  def top_up!(account, amount, method: 'API', description: nil, user: nil, reference: nil, date: nil)
     amount = amount.to_f
     raise ArgumentError, 'Amount must be greater than 0' if amount <= 0
 
@@ -63,7 +63,8 @@ module Billing
       user: user,
       reference: reference,
       previous_balance: current,
-      new_balance: new_balance
+      new_balance: new_balance,
+      date: date
     )
 
     {
@@ -256,14 +257,7 @@ module Billing
 
     records = JSON.parse(cfg.value) rescue []
     records.map do |inv|
-      # If invoice ID has standard date prefix INV-YYYYMMDD, ensure date is consistent
-      if inv['id'] =~ /^INV-(\d{4})(\d{2})(\d{2})/
-        id_date_str = "#{$1}-#{$2}-#{$3}"
-        current_inv_date = inv['date'].to_s
-        unless current_inv_date.start_with?(id_date_str)
-          inv['date'] = "#{id_date_str}T12:00:00+08:00"
-        end
-      end
+      inv['date'] = Time.current.iso8601 if inv['date'].blank?
       inv
     end
   end
@@ -282,14 +276,7 @@ module Billing
     invoice_id = reference.presence || "INV-#{Time.current.strftime('%Y%m%d')}-#{SecureRandom.hex(3).upcase}"
     user_email = user&.email || (account.respond_to?(:users) ? account.users.first&.email : nil)
     desc = description.presence || (method.to_s.casecmp('api').zero? ? 'API Balance Top-Up' : 'Account Balance Top-Up')
-
-    inv_date = if date.present?
-                 date
-               elsif invoice_id =~ /^INV-(\d{4})(\d{2})(\d{2})/
-                 "#{$1}-#{$2}-#{$3}T12:00:00+08:00"
-               else
-                 Time.current.iso8601
-               end
+    inv_date = date.presence || Time.current.iso8601
 
     invoice = {
       'id' => invoice_id,

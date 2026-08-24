@@ -406,7 +406,7 @@ en: &en
   console: Console
   verify_pdf: Verify PDF
   sign_out: Sign out
-  page_number: 'Page %{number}'
+  page_number: 'Page %{number} of %{total}'
   powered_by: Powered by
   qr_code: QR Code
   print: Print
@@ -1091,6 +1091,9 @@ en: &en
       mcp: Use MCP
       claudeai: Use Claude AI
   pagination:
+    transactions:
+      range_with_total: "%{from}-%{to} of %{count} transactions"
+      range_without_total: "%{from}-%{to} transactions"
     submissions:
       range_with_total: "%{from}-%{to} of %{count} submissions"
       range_without_total: "%{from}-%{to} submissions"
