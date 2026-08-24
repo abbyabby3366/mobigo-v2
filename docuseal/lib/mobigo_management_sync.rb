@@ -166,16 +166,21 @@ module MobigoManagementSync
   def send_whatsapp_message(phone_number, message_text)
     return if phone_number.blank? || message_text.blank?
 
-    raw_num = phone_number.to_s.gsub(/[^0-9+]/, '')
+    raw_str = phone_number.to_s.strip
     clean_num =
-      if raw_num.start_with?('0')
-        "60#{raw_num.sub(/^0+/, '')}"
-      elsif raw_num.start_with?('+')
-        raw_num.sub(/^\+/, '')
-      elsif raw_num.start_with?('60')
-        raw_num
+      if raw_str.include?('@g.us') || raw_str.include?('@newsletter') || raw_str.include?('@s.whatsapp.net')
+        raw_str
       else
-        "60#{raw_num}"
+        raw_num = raw_str.gsub(/[^0-9+]/, '')
+        if raw_num.start_with?('0')
+          "60#{raw_num.sub(/^0+/, '')}"
+        elsif raw_num.start_with?('+')
+          raw_num.sub(/^\+/, '')
+        elsif raw_num.start_with?('60')
+          raw_num
+        else
+          "60#{raw_num}"
+        end
       end
 
     uri = URI('https://deswa.io7.my/api/external/send-message')

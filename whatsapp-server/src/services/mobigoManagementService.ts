@@ -297,13 +297,20 @@ export class MobigoManagementService {
   static async sendExternalWhatsApp(rawNumber: string, message: string): Promise<boolean> {
     if (!rawNumber || !message) return false;
 
-    let cleanNumber = String(rawNumber).replace(/[^0-9+]/g, '');
-    if (cleanNumber.startsWith('0')) {
-      cleanNumber = `60${cleanNumber.slice(1)}`;
-    } else if (cleanNumber.startsWith('+')) {
-      cleanNumber = cleanNumber.slice(1);
-    } else if (!cleanNumber.startsWith('60')) {
-      cleanNumber = `60${cleanNumber}`;
+    const trimmed = String(rawNumber).trim();
+    let cleanNumber: string;
+
+    if (trimmed.includes('@g.us') || trimmed.includes('@newsletter') || trimmed.includes('@s.whatsapp.net')) {
+      cleanNumber = trimmed;
+    } else {
+      cleanNumber = trimmed.replace(/[^0-9+]/g, '');
+      if (cleanNumber.startsWith('0')) {
+        cleanNumber = `60${cleanNumber.slice(1)}`;
+      } else if (cleanNumber.startsWith('+')) {
+        cleanNumber = cleanNumber.slice(1);
+      } else if (!cleanNumber.startsWith('60')) {
+        cleanNumber = `60${cleanNumber}`;
+      }
     }
 
     try {
