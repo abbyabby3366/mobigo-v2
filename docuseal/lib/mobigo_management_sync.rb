@@ -70,8 +70,6 @@ module MobigoManagementSync
 
     if branch_name.present?
       serialized_data['branch_name'] = branch_name
-      serialized_data['dealerName'] = branch_name
-      serialized_data['cawangan'] = branch_name
 
       # Ensure it is present in values array if not already present
       if serialized_data['values'].is_a?(Array)
@@ -317,8 +315,7 @@ module MobigoManagementSync
         'audit_log_url' => audit_log_url
       },
       'branch' => {
-        'name' => branch_name.presence || 'DocuSeal System',
-        'dealer_name' => branch_name.presence || 'DocuSeal System'
+        'name' => branch_name.presence || 'DocuSeal System'
       },
       'customer' => {
         'fullName' => cust_name.to_s.strip,

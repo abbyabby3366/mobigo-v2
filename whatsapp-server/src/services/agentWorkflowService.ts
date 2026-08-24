@@ -62,18 +62,26 @@ export class AgentWorkflowService {
           const id = Number(t.id);
           const name = t.name || `Template ${id}`;
           const shortName = t.name || `Template ${id}`;
-          const keywords = [
+          const rawKeywords = [
             t.name?.toLowerCase(),
             t.slug?.toLowerCase(),
             ...(t.name?.toLowerCase().split(/[\s\-_]+/) || []),
           ].filter(Boolean);
+
+          if (t.name?.toLowerCase().includes('fonpintar') || t.name?.toLowerCase().includes('fon pintar')) {
+            rawKeywords.push('fonpintar', 'fon pintar', 'fon', 'fp');
+          } else if (t.name?.toLowerCase().includes('ctos') || t.name?.toLowerCase().includes('consent')) {
+            rawKeywords.push('ctos', 'cbm', 'consent');
+          } else if (t.name?.toLowerCase().includes('phone rental') || t.name?.toLowerCase().includes('rental service')) {
+            rawKeywords.push('phone rental', 'rental', 'sewa', 'agreement');
+          }
 
           return {
             id,
             name,
             shortName,
             description: t.description || '',
-            keywords,
+            keywords: Array.from(new Set(rawKeywords)),
           };
         });
         this.templatesFetchedAt = now;
@@ -90,6 +98,42 @@ export class AgentWorkflowService {
     if (!id) return undefined;
     const templates = await this.getAvailableTemplates();
     return templates.find((t) => t.id === id);
+  }
+
+  /**
+   * Helper to match user text to a template by index or keywords
+   */
+  static matchTemplateFromText(templates: TemplateOption[], text: string): TemplateOption | undefined {
+    const trimmed = text.trim();
+    const lower = trimmed.toLowerCase();
+
+    // 1. Exact numeric index (1, 2, 3, etc.)
+    const choiceIndex = parseInt(trimmed, 10);
+    if (!isNaN(choiceIndex) && choiceIndex >= 1 && choiceIndex <= templates.length) {
+      return templates[choiceIndex - 1];
+    }
+
+    // 2. High priority specific keywords
+    if (lower.includes('fonpintar') || lower.includes('fon pintar') || lower.includes('fon') || lower.includes('fp')) {
+      const fp = templates.find((t) => t.name.toLowerCase().includes('fonpintar') || t.name.toLowerCase().includes('fon pintar'));
+      if (fp) return fp;
+    }
+
+    if (lower.includes('ctos') || lower.includes('consent') || lower.includes('cbm')) {
+      const ctos = templates.find((t) => t.name.toLowerCase().includes('ctos') || t.name.toLowerCase().includes('consent'));
+      if (ctos) return ctos;
+    }
+
+    if (lower.includes('phone rental') || lower.includes('rental') || lower.includes('agreement')) {
+      // Prioritize standard agreement if not specifically Fonpintar
+      const pr = templates.find((t) => t.name.toLowerCase().includes('phone rental') && !t.name.toLowerCase().includes('fonpintar'));
+      if (pr) return pr;
+    }
+
+    // 3. Fallback to generic keyword search
+    return templates.find(
+      (t) => t.keywords?.some((k) => lower.includes(k)) || lower.includes(t.name.toLowerCase())
+    );
   }
 
   /**
@@ -269,19 +313,7 @@ export class AgentWorkflowService {
         return true;
       }
 
-      const choiceIndex = parseInt(trimmed, 10);
-      if (!isNaN(choiceIndex) && choiceIndex >= 1 && choiceIndex <= templates.length) {
-        const chosen = templates[choiceIndex - 1];
-        session.selectedTemplateId = chosen.id;
-        session.selectedTemplateName = chosen.name;
-        await this.executeAiExtraction(sessionId, session);
-        return true;
-      }
-
-      // Keyword match (e.g. user typed "ctos" or "phone rental")
-      const matched = templates.find(
-        (t) => t.keywords?.some((k) => lower.includes(k)) || lower.includes(t.name.toLowerCase())
-      );
+      const matched = AgentWorkflowService.matchTemplateFromText(templates, trimmed);
       if (matched) {
         session.selectedTemplateId = matched.id;
         session.selectedTemplateName = matched.name;
@@ -478,21 +510,11 @@ export class AgentWorkflowService {
       return;
     }
 
-    // If agent directly passed template option (e.g. "/ai 1" or "/ai 2" or "/ai ctos")
+    // If agent directly passed template option (e.g. "/ai 1", "/ai 3", "/ai fonpintar", "/ai ctos")
     const parts = rawText.split(/\s+/);
     if (parts.length > 1) {
-      const opt = parts.slice(1).join(' ').trim().toLowerCase();
-      const choiceIndex = parseInt(opt, 10);
-      if (!isNaN(choiceIndex) && choiceIndex >= 1 && choiceIndex <= templates.length) {
-        const chosen = templates[choiceIndex - 1];
-        session.selectedTemplateId = chosen.id;
-        session.selectedTemplateName = chosen.name;
-        await this.executeAiExtraction(sessionId, session);
-        return;
-      }
-      const matched = templates.find(
-        (t) => t.keywords?.some((k) => opt.includes(k)) || opt.includes(t.name.toLowerCase())
-      );
+      const opt = parts.slice(1).join(' ').trim();
+      const matched = AgentWorkflowService.matchTemplateFromText(templates, opt);
       if (matched) {
         session.selectedTemplateId = matched.id;
         session.selectedTemplateName = matched.name;

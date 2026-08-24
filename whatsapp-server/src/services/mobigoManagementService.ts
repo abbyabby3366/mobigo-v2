@@ -37,7 +37,7 @@ export class MobigoManagementService {
       submissionId?: string | number;
       templateName?: string;
       agentPhone?: string;
-      dealerName?: string;
+      branchName?: string;
     }
   ): Promise<CreateMobigoApplicationResponse> {
     const baseUrl = this.getApiUrl();
@@ -100,7 +100,7 @@ export class MobigoManagementService {
         quantity: 1,
       },
       financing: {
-        dealerName: (meta?.dealerName || data.branch_name || data.cawangan || 'DocuSeal System').trim(),
+        branchName: (meta?.branchName || data.branch_name || data.cawangan || 'DocuSeal System').trim(),
         remarks: [
           meta?.submissionId ? `DocuSeal Submission #${meta.submissionId}` : '',
           data.order_number ? `Order #${data.order_number}` : '',
@@ -193,7 +193,7 @@ export class MobigoManagementService {
     const envelope = rawWebhookPayload?.data || rawWebhookPayload || {};
     const submitter = envelope.submitters?.[0] || envelope.submitter || {};
     const rawValues = envelope.values || submitter.values || [];
-    let extractedBranch = envelope.branch_name || envelope.dealerName || submitter.branch_name;
+    let extractedBranch = envelope.branch_name || envelope.branchName || submitter.branch_name;
 
     if (!extractedBranch && Array.isArray(rawValues)) {
       const match = rawValues.find(
@@ -210,10 +210,8 @@ export class MobigoManagementService {
 
     if (extractedBranch) {
       envelope.branch_name = extractedBranch;
-      envelope.dealerName = extractedBranch;
       if (envelope.data && typeof envelope.data === 'object') {
         envelope.data.branch_name = extractedBranch;
-        envelope.data.dealerName = extractedBranch;
       }
     }
 
