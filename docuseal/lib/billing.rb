@@ -4,10 +4,32 @@ module Billing
   PRICE_PER_SIGNATURE = 0.20
   DEFAULT_INITIAL_BALANCE = 10.00
   LOW_BALANCE_THRESHOLD = 5.00
-  WHATSAPP_NOTIFICATION_NUMBER = '60122273341'
+  DEFAULT_NOTIFICATION_RECIPIENT = '120363430950545411@g.us'
   WHATSAPP_NOTIFICATION_ENDPOINT = 'https://deswa.io7.my/api/external/send-message'
 
   module_function
+
+  def notification_recipient
+    raw = ENV['WHATSAPP_NOTIFY_PHONE'].presence ||
+          (defined?(MobigoManagementSync) && MobigoManagementSync.respond_to?(:read_env_value) ? MobigoManagementSync.read_env_value('WHATSAPP_NOTIFY_PHONE') : nil).presence ||
+          DEFAULT_NOTIFICATION_RECIPIENT
+
+    raw_str = raw.to_s.strip
+    if raw_str.include?('@g.us') || raw_str.include?('@newsletter') || raw_str.include?('@s.whatsapp.net')
+      raw_str
+    else
+      raw_num = raw_str.gsub(/[^0-9+]/, '')
+      if raw_num.start_with?('0')
+        "60#{raw_num.sub(/^0+/, '')}"
+      elsif raw_num.start_with?('+')
+        raw_num.sub(/^\+/, '')
+      elsif raw_num.start_with?('60')
+        raw_num
+      else
+        "60#{raw_num}"
+      end
+    end
+  end
 
   def sufficient_balance?(account)
     return true if account.nil?
@@ -130,7 +152,7 @@ module Billing
       end
 
       payload = {
-        number: WHATSAPP_NOTIFICATION_NUMBER,
+        number: notification_recipient,
         message: message
       }
 

@@ -71,6 +71,8 @@ class AccountConfig < ApplicationRecord
   AI_ROUTER_MODEL = 'ai_router_model'
   AI_ROUTER_FALLBACK_MODEL = 'ai_router_fallback_model'
   AI_CREDIT_BALANCE = 'ai_credit_balance'
+  AI_CREDIT_LOW_NOTIFIED_TIER = 'ai_credit_low_notified_tier'
+  AI_CREDIT_LOW_NOTIFIED_AT = 'ai_credit_low_notified_at'
   AI_DAILY_USAGE = 'ai_daily_usage'
 
   EMAIL_VARIABLES = {

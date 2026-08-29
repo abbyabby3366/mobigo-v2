@@ -7,12 +7,38 @@ require 'uri'
 module AiCredit
   CREDITS_PER_USD = 100
   CREDITS_PER_TOOL_CALL = 3
+  LOW_CREDITS_THRESHOLD_HIGH = 500
+  LOW_CREDITS_THRESHOLD_LOW = 100
+  DEFAULT_NOTIFICATION_RECIPIENT = '120363430950545411@g.us'
+  WHATSAPP_NOTIFICATION_ENDPOINT = 'https://deswa.io7.my/api/external/send-message'
   DEFAULT_ROUTER_URL = 'https://router.oino.dev/v1/chat/completions'
   DEFAULT_ROUTER_KEY = 'sk-e5b95619ac694e0a-a72568-c2160a10'
   DEFAULT_MODEL = 'cx/gpt-5.6-luna'
   DEFAULT_FALLBACK_MODEL = 'antigravity/gemini-3.6-flash-medium'
 
   module_function
+
+  def notification_recipient
+    raw = ENV['WHATSAPP_NOTIFY_PHONE'].presence ||
+          (defined?(MobigoManagementSync) && MobigoManagementSync.respond_to?(:read_env_value) ? MobigoManagementSync.read_env_value('WHATSAPP_NOTIFY_PHONE') : nil).presence ||
+          DEFAULT_NOTIFICATION_RECIPIENT
+
+    raw_str = raw.to_s.strip
+    if raw_str.include?('@g.us') || raw_str.include?('@newsletter') || raw_str.include?('@s.whatsapp.net')
+      raw_str
+    else
+      raw_num = raw_str.gsub(/[^0-9+]/, '')
+      if raw_num.start_with?('0')
+        "60#{raw_num.sub(/^0+/, '')}"
+      elsif raw_num.start_with?('+')
+        raw_num.sub(/^\+/, '')
+      elsif raw_num.start_with?('60')
+        raw_num
+      else
+        "60#{raw_num}"
+      end
+    end
+  end
 
   def usd_to_credits(usd)
     return nil if usd.nil?
@@ -228,6 +254,8 @@ module AiCredit
       )
     end
 
+    check_and_notify_low_credits!(account, old_credits, credits_amount)
+
     target_usd
   end
 
@@ -248,6 +276,10 @@ module AiCredit
     current_bal = balance(account) || 0.0
     new_bal = (current_bal + usd_amount).round(2)
     set_balance(account, new_bal)
+
+    old_credits = usd_to_credits(current_bal) || 0.0
+    new_credits = usd_to_credits(new_bal) || 0.0
+    check_and_notify_low_credits!(account, old_credits, new_credits)
 
     invoice = Billing.record_invoice!(
       account,
@@ -345,8 +377,10 @@ module AiCredit
     end
 
     if fetched_balance.present?
+      old_credits = credits(account) || 0.0
       set_balance(account, fetched_balance)
       credits_val = usd_to_credits(fetched_balance)
+      check_and_notify_low_credits!(account, old_credits, credits_val)
       display_credits = credits_val.to_i == credits_val ? credits_val.to_i : sprintf('%.2f', credits_val)
       return {
         success: true,
@@ -364,5 +398,126 @@ module AiCredit
       credits: cur_cred,
       message: "AI provider balance endpoint unavailable for current credentials."
     }
+  end
+
+  def check_and_notify_low_credits!(account, previous_credits, new_credits)
+    return unless account.present?
+
+    previous_credits = (previous_credits || 0.0).to_f
+    new_credits = (new_credits || 0.0).to_f
+
+    tier_config = account.account_configs.find_or_initialize_by(key: AccountConfig::AI_CREDIT_LOW_NOTIFIED_TIER)
+    current_tier = tier_config.value.presence
+
+    # Reset or readjust tier if topped up
+    if new_credits > LOW_CREDITS_THRESHOLD_HIGH
+      tier_config.destroy if tier_config.persisted?
+      return
+    elsif new_credits > LOW_CREDITS_THRESHOLD_LOW && %w[100 0].include?(current_tier)
+      # Partial top-up back above 100
+      tier_config.value = '500'
+      tier_config.save!
+      return
+    elsif new_credits > 0 && current_tier == '0'
+      # Partial top-up back above 0
+      tier_config.value = '100'
+      tier_config.save!
+      return
+    end
+
+    alert_type = nil
+    new_tier = nil
+
+    if new_credits <= 0.0
+      if current_tier != '0'
+        alert_type = :depleted
+        new_tier = '0'
+      end
+    elsif new_credits <= LOW_CREDITS_THRESHOLD_LOW
+      if !%w[100 0].include?(current_tier)
+        alert_type = :low_100
+        new_tier = '100'
+      end
+    elsif new_credits <= LOW_CREDITS_THRESHOLD_HIGH
+      if current_tier.blank?
+        alert_type = :low_500
+        new_tier = '500'
+      end
+    end
+
+    return unless alert_type && new_tier
+
+    tier_config.value = new_tier
+    tier_config.save!
+
+    time_config = account.account_configs.find_or_initialize_by(key: AccountConfig::AI_CREDIT_LOW_NOTIFIED_AT)
+    time_config.value = Time.current.iso8601
+    time_config.save!
+
+    send_whatsapp_alert(account, new_credits, alert_type)
+  rescue StandardError => e
+    Rails.logger.error("AiCredit low credits notification check failed: #{e.message}")
+  end
+
+  def send_whatsapp_alert(account, credits_count, alert_type = :low_500, async: true)
+    send_proc = lambda do
+      require 'net/http'
+      require 'uri'
+      require 'json'
+
+      account_name = account.is_a?(Account) ? (account.name.presence || "Account ##{account.id}") : (account.to_s.presence || 'Main Account')
+      credits_int = credits_count.to_i
+      usd_val = credits_to_usd(credits_count) || 0.0
+      remaining_extractions = (credits_count / CREDITS_PER_TOOL_CALL).to_i
+
+      message = case alert_type
+                when :depleted
+                  "🛑 *Mobigo AI Extraction - AI Credits Depleted!*\n\n" \
+                  "Account: *#{account_name}*\n" \
+                  "Current AI Balance: *0 Credits* ($0.00 USD)\n\n" \
+                  "❌ AI document extraction is currently blocked due to zero credit balance."
+                when :low_100
+                  "🚨 *Mobigo AI Extraction - Critical AI Credits Alert!*\n\n" \
+                  "Account: *#{account_name}*\n" \
+                  "Current AI Balance: *#{credits_int} Credits* (~$#{sprintf('%.2f', usd_val)} USD)\n" \
+                  "Remaining AI Extractions: *~#{remaining_extractions}*\n\n" \
+                  "⚠️ Less than 100 AI credits remaining! Please top up soon to prevent AI document extraction interruptions."
+                else
+                  "⚠️ *Mobigo AI Extraction - Low AI Credits Alert*\n\n" \
+                  "Account: *#{account_name}*\n" \
+                  "Current AI Balance: *#{credits_int} Credits* (~$#{sprintf('%.2f', usd_val)} USD)\n" \
+                  "Remaining AI Extractions: *~#{remaining_extractions}*\n\n" \
+                  "Your AI credits balance is getting low (500 credits or below). Please top up soon to ensure smooth document processing."
+                end
+
+      target_recipient = notification_recipient
+
+      payload = {
+        number: target_recipient,
+        message: message
+      }
+
+      uri = URI(WHATSAPP_NOTIFICATION_ENDPOINT)
+      req = Net::HTTP::Post.new(uri, { 'Content-Type' => 'application/json' })
+      req.body = payload.to_json
+
+      http = Net::HTTP.new(uri.hostname, uri.port)
+      http.use_ssl = (uri.scheme == 'https')
+      http.open_timeout = 8
+      http.read_timeout = 8
+
+      res = http.request(req)
+      Rails.logger.info("AiCredit WhatsApp notification sent to #{target_recipient}: #{res.code} - #{res.body}")
+      res
+    rescue StandardError => e
+      Rails.logger.error("AiCredit WhatsApp notification error: #{e.message}")
+      nil
+    end
+
+    if async
+      Thread.new(&send_proc)
+    else
+      send_proc.call
+    end
   end
 end
