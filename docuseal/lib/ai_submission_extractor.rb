@@ -122,10 +122,10 @@ module AiSubmissionExtractor
          - Product Name / Model ("Nama Produk", "Model", "Device Model"):
            * Extract clean device model, storage capacity, and color from text or box image (e.g. "MFYM4X/A iPhone 17 Pro Max, Silver, 256GB Model A3526" -> "iPhone 17 Pro Max 256GB Silver").
          - Primary IMEI / IMEI 1 ("IMEI1", "imei1", "IMEI", "IMEI / MEID"):
-           * Extract primary 15-digit IMEI.
-           * CRITICAL - STRIP SPACES: On iOS Settings and Hello info screens, IMEIs are displayed with spaces (e.g. "35 422867 725202 4" or "35 375125 798813 0"). Always strip all spaces to return a clean continuous 15-digit number (e.g. "354228677252024"). Strip software version suffixes (e.g. "/ 01").
-           * CRITICAL - DO NOT EXTRACT MEID AS IMEI: On the Hello info screen, "MEID" is a 14-digit number (e.g. "35422867725202"). Do NOT extract the 14-digit MEID when the full 15-digit "IMEI" (e.g. "35 422867 725202 4") is present below it.
-           * CRITICAL - DO NOT CONFUSE WITH EID OR UPC: Do NOT extract 32-digit EIDs (e.g. "89049032...") or 12-digit UPC barcodes ("UPC 1 95950 63887 5") as IMEI.
+           * Extract primary 15-digit IMEI from device box sticker label (commonly printed as "IMEI/MEID", "IMEI", or "IMEI 1"), iOS/Android screen (Settings / *#06# / Hello screen), or text notes.
+           * Strip all spaces (e.g. "35 422867 725202 4" -> "354228677252024") and software version suffixes (e.g. "/ 01").
+           * Physical box labels printed as "IMEI/MEID" or "IMEI / MEID" ARE valid Primary IMEIs (extract the 15-digit number).
+           * Only skip 14-digit MEID if a full 15-digit IMEI is also available. Do NOT extract 32-digit EIDs or 12-digit UPC barcodes as IMEI.
          - Secondary IMEI / IMEI 2 ("IMEI2", "imei2"):
            * Extract secondary 15-digit IMEI from device box label or screen if present (e.g. "354704736416883" or "35 375125 520477 9" -> "353751255204779"). Strip all spaces. If device only has 1 IMEI, leave empty.
          - Serial Number ("Siri Telefon", "Serial No", "Serial", "SN"):
@@ -894,13 +894,22 @@ module AiSubmissionExtractor
       fields_hash[k] ||= v
     end
 
-    # Explicitly capture imei1 and imei2 from root fields or scan
-    raw_imei1 = raw_fields['imei1'] || raw_fields['IMEI1'] || raw_fields['imei_1'] || raw_fields['primary_imei']
-    raw_imei2 = raw_fields['imei2'] || raw_fields['IMEI2'] || raw_fields['imei_2'] || raw_fields['secondary_imei']
+    # Explicitly capture imei1 and imei2 from root fields, top level or submitters scan
+    raw_imei1 = raw_fields['imei1'] || raw_fields['IMEI1'] || raw_fields['imei_1'] || raw_fields['primary_imei'] || parsed_data['imei1'] || parsed_data['IMEI1']
+    raw_imei2 = raw_fields['imei2'] || raw_fields['IMEI2'] || raw_fields['imei_2'] || raw_fields['secondary_imei'] || parsed_data['imei2'] || parsed_data['IMEI2']
+
+    # Also check inside submitters values
+    if raw_imei1.blank? && parsed_data['submitters'].present?
+      parsed_data['submitters'].each do |sub_d|
+        s_vals = sub_d['values'] || {}
+        raw_imei1 ||= s_vals['imei1'] || s_vals['IMEI1'] || s_vals['imei_1'] || s_vals['primary_imei'] || s_vals['Nombor IMEI'] || s_vals['imei']
+        raw_imei2 ||= s_vals['imei2'] || s_vals['IMEI2'] || s_vals['imei_2'] || s_vals['secondary_imei']
+      end
+    end
 
     # If raw single imei provided containing two IMEIs (e.g. separated by slash or newline), parse them out
-    if raw_imei1.blank? && (raw_fields['imei'].present? || raw_fields['imei_number'].present? || raw_fields['nombor_imei'].present?)
-      combined_imei = raw_fields['imei'] || raw_fields['imei_number'] || raw_fields['nombor_imei']
+    if raw_imei1.blank? && (raw_fields['imei'].present? || raw_fields['imei_number'].present? || raw_fields['nombor_imei'].present? || parsed_data['imei'].present?)
+      combined_imei = raw_fields['imei'] || raw_fields['imei_number'] || raw_fields['nombor_imei'] || parsed_data['imei']
       if combined_imei.to_s =~ /(\d{14,16})[^\d]+(\d{14,16})/
         raw_imei1 = Regexp.last_match(1)
         raw_imei2 = Regexp.last_match(2)
@@ -910,12 +919,14 @@ module AiSubmissionExtractor
     end
 
     if raw_imei1.present?
-      fields_hash['imei1'] = raw_imei1
-      english_fields['imei1'] = raw_imei1
+      clean_imei1 = raw_imei1.to_s.gsub(/\s+/, '').strip
+      fields_hash['imei1'] = clean_imei1
+      english_fields['imei1'] = clean_imei1
     end
     if raw_imei2.present?
-      fields_hash['imei2'] = raw_imei2
-      english_fields['imei2'] = raw_imei2
+      clean_imei2 = raw_imei2.to_s.gsub(/\s+/, '').strip
+      fields_hash['imei2'] = clean_imei2
+      english_fields['imei2'] = clean_imei2
     end
 
     # Explicitly capture branch_name from root fields, AI fields, or regex scan

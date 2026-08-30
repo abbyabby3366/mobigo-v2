@@ -145,7 +145,7 @@ RAW DATA EXTRACTION RULES:
 
 2. Device & Product Information:
    - Product Name / Model ("Nama Produk", "Model", "Device Model"): Extract clean device model, capacity, and color from text or box image.
-   - Primary IMEI ("IMEI1", "imei1", "IMEI", "IMEI / MEID"): Extract primary 15-digit IMEI. Always strip all spaces (e.g. "35 422867 725202 4" -> "354228677252024"). Do not extract 14-digit MEID, 32-digit EID, or UPC codes as IMEI.
+   - Primary IMEI ("IMEI1", "imei1", "IMEI", "IMEI / MEID"): Extract primary 15-digit IMEI from box sticker label (often labeled "IMEI/MEID", "IMEI", or "IMEI 1"), iOS/Android screen, or text notes. Always strip spaces (e.g. "35 422867 725202 4" -> "354228677252024").
    - Secondary IMEI ("IMEI2", "imei2"): Extract secondary 15-digit IMEI from box label or screen if present (strip spaces).
    - Serial Number ("Siri Telefon", "Serial No", "Serial", "SN"): Extract clean serial number stripping prefixes like "(S) Serial No." or "SN ".
    - Quantity ("Kuantiti Peralatan", "Quantity"): Usually "1".
