@@ -114,15 +114,23 @@ module AiSubmissionExtractor
            * Extract branch name from notes or text if provided (e.g. "branch name: ABC Holdings" -> "ABC Holdings"). Put in fields["branch_name"].
 
       2. Device & Product Information:
+         - Supported Image / Screen Sources:
+           * Physical Device Box Label (e.g. "MFYM4X/A iPhone 17 Pro Max, Silver, 256GB Model A3526", "IMEI/MEID", "IMEI2", "(S) Serial No.")
+           * iOS / Android Settings -> General -> About screen (supports English & Malay UI e.g. "SIM TERSEDIA", "Kapasiti", "Kunci Pembawa", "IMEI", "IMEI2")
+           * Dialed *#06# "Device Info" screen (clean list with EID, IMEI, IMEI2 and barcodes)
+           * iOS Setup / Hello "(i)" screen ("SN", "MEID", "EID", "IMEI", "IMEI2")
          - Product Name / Model ("Nama Produk", "Model", "Device Model"):
-           * Extract device model, storage capacity, and color from text or box image (e.g. "iPhone 17 Pro Max 256GB Desert Titanium").
+           * Extract clean device model, storage capacity, and color from text or box image (e.g. "MFYM4X/A iPhone 17 Pro Max, Silver, 256GB Model A3526" -> "iPhone 17 Pro Max 256GB Silver").
          - Primary IMEI / IMEI 1 ("IMEI1", "imei1", "IMEI", "IMEI / MEID"):
-           * Extract primary 15-digit IMEI from device box label or text (e.g. "354704736663104"). Strip software version suffixes (e.g. "/ 01").
-           * CRITICAL: DO NOT confuse the 32-digit EID barcode on iPhone boxes with the 15-digit IMEI.
+           * Extract primary 15-digit IMEI.
+           * CRITICAL - STRIP SPACES: On iOS Settings and Hello info screens, IMEIs are displayed with spaces (e.g. "35 422867 725202 4" or "35 375125 798813 0"). Always strip all spaces to return a clean continuous 15-digit number (e.g. "354228677252024"). Strip software version suffixes (e.g. "/ 01").
+           * CRITICAL - DO NOT EXTRACT MEID AS IMEI: On the Hello info screen, "MEID" is a 14-digit number (e.g. "35422867725202"). Do NOT extract the 14-digit MEID when the full 15-digit "IMEI" (e.g. "35 422867 725202 4") is present below it.
+           * CRITICAL - DO NOT CONFUSE WITH EID OR UPC: Do NOT extract 32-digit EIDs (e.g. "89049032...") or 12-digit UPC barcodes ("UPC 1 95950 63887 5") as IMEI.
          - Secondary IMEI / IMEI 2 ("IMEI2", "imei2"):
-           * Extract secondary 15-digit IMEI from device box label if present (e.g. "354704736416883"). If device only has 1 IMEI, leave empty.
-         - Serial Number ("Siri Telefon", "Serial No", "Serial"):
-           * Extract serial number from box label (e.g. "LG93CV43WP").
+           * Extract secondary 15-digit IMEI from device box label or screen if present (e.g. "354704736416883" or "35 375125 520477 9" -> "353751255204779"). Strip all spaces. If device only has 1 IMEI, leave empty.
+         - Serial Number ("Siri Telefon", "Serial No", "Serial", "SN"):
+           * Extract clean serial number from box label or screen (e.g. "FW3V4GK6M1" or "QK4CLWQ6HW").
+           * Strip prefixes like "(S) Serial No." or "SN ".
          - Quantity ("Kuantiti Peralatan", "Quantity"): Usually "1".
          - Note: DO NOT combine IMEIs into "Nombor IMEI"; extract "imei1" and "imei2" separately as RAW fields.
 
