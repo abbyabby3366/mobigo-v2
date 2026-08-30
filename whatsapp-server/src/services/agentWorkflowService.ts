@@ -24,6 +24,7 @@ export interface ChatSessionWorkflow {
   selectedTemplateId?: number;
   selectedTemplateName?: string;
   extractedData?: ExtractedDocumentData;
+  rawAiData?: any;
   missingFieldPrompt?: string;
   updatedAt: string;
 }
@@ -589,6 +590,7 @@ export class AgentWorkflowService {
       }
 
       session.extractedData = extracted;
+      session.rawAiData = JSON.parse(JSON.stringify(extracted));
       session.state = AgentChatState.REVIEWING;
       await this.saveSession(session);
 
@@ -852,6 +854,9 @@ export class AgentWorkflowService {
         send_email: false,
         send_sms: false,
         submitters,
+        ai_extracted_data: session.rawAiData || d,
+        ai_text_notes: session.textNotes?.length ? session.textNotes.join('\n\n') : undefined,
+        files: session.bufferedFiles?.length ? session.bufferedFiles : undefined,
       });
 
       const firstSubmitter = Array.isArray(submissionRes)

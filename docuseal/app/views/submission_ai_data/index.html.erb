@@ -1,0 +1,173 @@
+<%= render 'shared/turbo_modal_large', title: 'AI Extraction Data & Source Files' do %>
+  <div class="p-5 space-y-6">
+
+    <!-- Overview Banner -->
+    <div class="p-4 rounded-xl bg-neutral-900 text-white flex items-center justify-between shadow-xs">
+      <div class="flex items-center space-x-3">
+        <div class="p-2 bg-neutral-800 rounded-lg text-yellow-400">
+          <%= svg_icon('sparkles', class: 'w-5 h-5 stroke-2') %>
+        </div>
+        <div>
+          <div class="font-bold text-sm text-white">AI Extraction Audit Log</div>
+          <div class="text-xs text-neutral-300">
+            <%= @ai_input_files.size %> file(s) uploaded • <%= @field_diffs.count { |d| d[:changed] } %> field(s) edited by user
+          </div>
+        </div>
+      </div>
+      <% if @ai_extracted_data.present? %>
+        <span class="badge badge-warning text-xs font-semibold px-2.5 py-1">AI Processed</span>
+      <% end %>
+    </div>
+
+    <!-- Section 1: Original Input Files & Text Notes -->
+    <div class="space-y-3">
+      <div class="flex items-center justify-between border-b border-base-300 pb-2">
+        <div class="flex items-center space-x-2">
+          <%= svg_icon('files', class: 'w-4 h-4 text-primary') %>
+          <h3 class="font-bold text-xs uppercase tracking-wider text-base-content/80">Original Source Files & Notes</h3>
+        </div>
+        <span class="text-xs text-base-content/60"><%= @ai_input_files.size %> attached file(s)</span>
+      </div>
+
+      <% if @ai_input_files.empty? && @ai_text_notes.blank? %>
+        <div class="p-4 bg-base-200 rounded-xl text-center text-xs text-base-content/60">
+          No raw input files or notes were recorded for this submission.
+        </div>
+      <% else %>
+        <!-- Files Grid -->
+        <% if @ai_input_files.any? %>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <% @ai_input_files.each_with_index do |attachment, idx| %>
+              <% is_image = attachment.content_type.to_s.start_with?('image/') %>
+              <% is_pdf = attachment.content_type.to_s.include?('pdf') %>
+              <% file_url = ActiveStorage::Blob.proxy_path(attachment.blob, expires_at: 4.hours.from_now) rescue url_for(attachment) %>
+
+              <div class="border border-base-300 bg-base-200/50 rounded-xl p-2.5 flex flex-col justify-between space-y-2 hover:border-primary transition-all">
+                <% if is_image %>
+                  <a href="<%= file_url %>" target="_blank" class="block aspect-video bg-base-300 rounded-lg overflow-hidden relative group">
+                    <img src="<%= file_url %>" class="w-full h-full object-cover transition-transform group-hover:scale-105" alt="<%= attachment.filename %>" loading="lazy">
+                    <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-medium">
+                      <%= svg_icon('external_link', class: 'w-4 h-4 mr-1') %> View Full
+                    </div>
+                  </a>
+                <% else %>
+                  <div class="aspect-video bg-base-300 rounded-lg flex items-center justify-center text-base-content/50">
+                    <%= svg_icon(is_pdf ? 'file_text' : 'files', class: 'w-8 h-8') %>
+                  </div>
+                <% end %>
+
+                <div class="truncate">
+                  <div class="text-xs font-semibold truncate" title="<%= attachment.filename %>">
+                    <%= attachment.filename %>
+                  </div>
+                  <div class="text-[10px] text-base-content/50">
+                    <%= number_to_human_size(attachment.byte_size) %>
+                  </div>
+                </div>
+
+                <a href="<%= file_url %>" target="_blank" download="<%= attachment.filename %>" class="btn btn-xs btn-outline w-full gap-1">
+                  <%= svg_icon('download', class: 'w-3 h-3') %> Download
+                </a>
+              </div>
+            <% end %>
+          </div>
+        <% end %>
+
+        <!-- Source Text Notes -->
+        <% if @ai_text_notes.present? %>
+          <div class="p-3 bg-base-200/80 rounded-xl border border-base-300 space-y-1">
+            <div class="text-[11px] font-bold uppercase tracking-wider text-base-content/70 flex items-center gap-1">
+              <%= svg_icon('message', class: 'w-3.5 h-3.5') %> Source Text Notes
+            </div>
+            <pre class="text-xs font-mono whitespace-pre-wrap text-base-content/90 max-h-36 overflow-y-auto leading-relaxed"><%= @ai_text_notes %></pre>
+          </div>
+        <% end %>
+      <% end %>
+    </div>
+
+    <!-- Section 2: Original AI Output vs Current Submission Values Diff -->
+    <div class="space-y-3">
+      <div class="flex items-center justify-between border-b border-base-300 pb-2">
+        <div class="flex items-center space-x-2">
+          <%= svg_icon('list', class: 'w-4 h-4 text-warning') %>
+          <h3 class="font-bold text-xs uppercase tracking-wider text-base-content/80">Original AI Extraction vs Final Values</h3>
+        </div>
+        <span class="text-xs text-base-content/60"><%= @field_diffs.size %> total field(s)</span>
+      </div>
+
+      <% if @field_diffs.empty? %>
+        <div class="p-4 bg-base-200 rounded-xl text-center text-xs text-base-content/60">
+          No extracted field values to compare.
+        </div>
+      <% else %>
+        <div class="border border-base-300 rounded-xl overflow-hidden shadow-2xs">
+          <table class="table table-xs w-full">
+            <thead class="bg-base-200 text-base-content/80 text-[11px] uppercase">
+              <tr>
+                <th class="py-2.5 pl-3">Field Name</th>
+                <th class="py-2.5">Original AI Value</th>
+                <th class="py-2.5">Final Value in Contract</th>
+                <th class="py-2.5 text-right pr-3">Status</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-base-300 text-xs">
+              <% @field_diffs.each do |diff| %>
+                <tr class="<%= diff[:changed] ? 'bg-warning/10' : '' %>">
+                  <td class="font-bold py-2 pl-3 align-top whitespace-nowrap text-base-content/90">
+                    <%= diff[:field] %>
+                  </td>
+                  <td class="py-2 align-top text-base-content/70 font-mono text-[11px] max-w-[140px] truncate" title="<%= diff[:original_value] %>">
+                    <%= diff[:original_value] %>
+                  </td>
+                  <td class="py-2 align-top font-mono text-[11px] font-semibold <%= diff[:changed] ? 'text-warning-content font-bold' : 'text-base-content' %> max-w-[140px] truncate" title="<%= diff[:current_value] %>">
+                    <%= diff[:current_value] %>
+                  </td>
+                  <td class="py-2 pr-3 text-right align-top whitespace-nowrap">
+                    <% if diff[:changed] %>
+                      <span class="badge badge-warning badge-xs font-bold gap-0.5">
+                        <%= svg_icon('pencil', class: 'w-2.5 h-2.5') %> Edited
+                      </span>
+                    <% elsif diff[:added] %>
+                      <span class="badge badge-info badge-xs font-bold">Added</span>
+                    <% elsif diff[:removed] %>
+                      <span class="badge badge-error badge-xs font-bold">Cleared</span>
+                    <% else %>
+                      <span class="badge badge-ghost badge-xs text-base-content/50">Matched</span>
+                    <% end %>
+                  </td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% end %>
+    </div>
+
+    <!-- Section 3: Raw AI Response JSON -->
+    <% if @ai_extracted_data.present? %>
+      <div class="space-y-2">
+        <details class="group border border-base-300 bg-base-200/50 rounded-xl overflow-hidden">
+          <summary class="flex items-center justify-between p-3 cursor-pointer hover:bg-base-200 transition-colors">
+            <span class="text-xs font-bold flex items-center gap-1.5 text-base-content/80">
+              <%= svg_icon('code', class: 'w-3.5 h-3.5') %> View Raw AI Response JSON
+            </span>
+            <div class="flex items-center space-x-2">
+              <span class="text-[11px] text-base-content/50 group-open:hidden">Expand</span>
+              <span class="text-[11px] text-base-content/50 hidden group-open:inline">Collapse</span>
+              <%= svg_icon('chevron_down', class: 'w-3.5 h-3.5 group-open:rotate-180 transition-transform') %>
+            </div>
+          </summary>
+          <div class="p-3 pt-0 border-t border-base-300/60 bg-neutral text-neutral-content space-y-2">
+            <div class="flex justify-end pt-2">
+              <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('raw_ai_json_block').innerText); this.innerText='Copied!';" class="btn btn-xs btn-outline btn-warning text-[10px]">
+                Copy JSON
+              </button>
+            </div>
+            <pre id="raw_ai_json_block" class="text-[11px] font-mono whitespace-pre-wrap max-h-60 overflow-y-auto leading-relaxed"><%= JSON.pretty_generate(@ai_extracted_data) rescue @ai_extracted_data.to_s %></pre>
+          </div>
+        </details>
+      </div>
+    <% end %>
+
+  </div>
+<% end %>

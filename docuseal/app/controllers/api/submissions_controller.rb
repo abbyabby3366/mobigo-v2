@@ -95,6 +95,38 @@ module Api
         end
       end
 
+      # Store AI extracted unedited data, notes & files if provided
+      ai_raw = params[:ai_extracted_data].presence || params.dig(:submission, :ai_extracted_data) || params[:raw_ai_data]
+      parsed_ai_data = if ai_raw.is_a?(String)
+                         begin
+                           JSON.parse(ai_raw)
+                         rescue StandardError
+                           ai_raw
+                         end
+                       else
+                         ai_raw
+                       end
+
+      notes = params[:ai_text_notes].presence || params.dig(:submission, :ai_text_notes) || params[:text] || params[:text_notes].to_s
+      input_files = params[:ai_input_files] || params[:files] || params.dig(:submission, :files) || []
+
+      submissions.each do |submission|
+        submission.preferences ||= {}
+        submission.preferences['ai_extracted_data'] = parsed_ai_data if parsed_ai_data.present?
+        submission.preferences['ai_text_notes'] = notes if notes.present?
+
+        Array(input_files).each do |f_item|
+          next if f_item.blank?
+          begin
+            submission.ai_input_files.attach(f_item)
+          rescue StandardError => attach_err
+            Rails.logger.warn("Failed to attach AI source file in API: #{attach_err.message}")
+          end
+        end
+
+        submission.save if submission.changed?
+      end
+
       SearchEntries.enqueue_reindex(submissions)
 
       render json: build_create_json(submissions)

@@ -72,6 +72,19 @@ class Submission < ApplicationRecord
 
   has_many_attached :preview_documents
   has_many_attached :documents
+  has_many_attached :ai_input_files
+
+  def ai_extracted_data
+    preferences&.dig('ai_extracted_data') || {}
+  end
+
+  def ai_text_notes
+    preferences&.dig('ai_text_notes')
+  end
+
+  def has_ai_data?
+    ai_input_files.attached? || preferences&.dig('ai_extracted_data').present? || preferences&.dig('ai_text_notes').present?
+  end
 
   has_many :template_accesses, primary_key: :template_id, foreign_key: :template_id, dependent: nil, inverse_of: false
 

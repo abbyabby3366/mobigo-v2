@@ -192,7 +192,7 @@ class AiSubmissionsController < ApplicationController
     submissions_attrs, _, new_fields =
       Submissions::NormalizeParamUtils.normalize_submissions_params!(submissions_attrs, template, add_fields: true)
 
-    Submissions.create_from_submitters(
+    created_submissions = Submissions.create_from_submitters(
       template: template,
       user: current_user,
       source: :invite,
@@ -201,6 +201,40 @@ class AiSubmissionsController < ApplicationController
       new_fields: new_fields,
       params: params.to_unsafe_h.merge('send_completed_email' => true)
     )
+
+    # Store original unedited AI data, text notes & attach source files
+    ai_raw = params[:ai_extracted_data].presence || raw_sub[:ai_extracted_data] || params[:raw_ai_data]
+    parsed_ai_data = if ai_raw.is_a?(String)
+                       begin
+                         JSON.parse(ai_raw)
+                       rescue StandardError
+                         ai_raw
+                       end
+                     else
+                       ai_raw
+                     end
+
+    notes = params[:ai_text_notes].presence || params[:text].presence || params[:text_notes].to_s
+    input_files = params[:files] || raw_sub[:files] || []
+
+    Array(created_submissions).each do |sub_record|
+      sub_record.preferences ||= {}
+      sub_record.preferences['ai_extracted_data'] = parsed_ai_data if parsed_ai_data.present?
+      sub_record.preferences['ai_text_notes'] = notes if notes.present?
+
+      Array(input_files).each do |f_item|
+        next if f_item.blank?
+        begin
+          sub_record.ai_input_files.attach(f_item)
+        rescue StandardError => attach_err
+          Rails.logger.warn("Failed to attach AI source file: #{attach_err.message}")
+        end
+      end
+
+      sub_record.save if sub_record.changed?
+    end
+
+    created_submissions
   end
 
   def ensure_sufficient_balance

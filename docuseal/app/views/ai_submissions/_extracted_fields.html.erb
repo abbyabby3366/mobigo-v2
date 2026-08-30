@@ -17,8 +17,10 @@
 
   <!-- Form Fields Tab -->
   <div id="ai_tab_form" class="space-y-6">
-    <%= form_with url: ai_submissions_path, method: :post, id: 'ai_create_submission_form', local: true, html: { novalidate: true }, class: 'space-y-6' do |f| %>
+    <%= form_with url: ai_submissions_path, method: :post, id: 'ai_create_submission_form', local: true, html: { multipart: true, novalidate: true }, class: 'space-y-6' do |f| %>
       <%= hidden_field_tag :template_id, template.id %>
+      <%= hidden_field_tag :ai_extracted_data, (local_assigns[:extracted_data] || {}).to_json %>
+      <input type="file" name="files[]" multiple style="display: none !important;" id="ai_submission_files_input">
 
       <% submitters.each_with_index do |sub, idx| %>
         <% sub_fields = template_fields.select { |tf| tf['submitter_uuid'] == sub['uuid'] } %>

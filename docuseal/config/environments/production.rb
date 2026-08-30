@@ -38,7 +38,7 @@ Rails.application.configure do
 
   # Store uploaded files on the local file system (see config/storage.yml for options).
   config.active_storage.service =
-    if ENV['S3_ATTACHMENTS_BUCKET'].present?
+    if (ENV['S3_ATTACHMENTS_BUCKET'] || ENV['S3_BUCKET_NAME']).present?
       :aws_s3
     elsif ENV['GCS_BUCKET'].present?
       :google

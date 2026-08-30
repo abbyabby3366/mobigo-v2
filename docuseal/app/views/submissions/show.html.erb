@@ -32,6 +32,14 @@
           <% end %>
         </open-modal-mobile>
       <% end %>
+      <% if signed_in? && @submission.has_ai_data? %>
+        <open-modal-mobile class="flex">
+          <%= link_to submission_ai_data_path(@submission), class: 'white-button', data: { turbo_frame: :modal } do %>
+            <%= svg_icon('sparkles', class: 'w-6 h-6 text-yellow-500') %>
+            <span class="hidden md:block">AI Data</span>
+          <% end %>
+        </open-modal-mobile>
+      <% end %>
       <% if signed_in? && !@submission.completed_at? && can?(:manage, :resend_all) && @submission.submitters.to_a.size > 3 && !@submission.archived_at? && !@submission.template&.archived_at? && !@submission.expired? && can?(:update, @submission) %>
         <% pending_submitters_count = @submission.submitters.to_a.count { |s| !s.completed_at? && s.email.present? && !s.declined_at? } %>
         <% if pending_submitters_count.positive? %>

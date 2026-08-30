@@ -508,6 +508,33 @@ RAW DATA EXTRACTION RULES:
     });
   };
 
+  window.attachAiFilesAndNotesToForm = function(form) {
+    if (!form) return;
+    try {
+      if (window.aiSelectedFiles && window.aiSelectedFiles.length > 0) {
+        const fileInput = form.querySelector('#ai_submission_files_input') || form.querySelector('input[name="files[]"]');
+        if (fileInput && typeof DataTransfer !== 'undefined') {
+          const dt = new DataTransfer();
+          window.aiSelectedFiles.forEach(f => dt.items.add(f));
+          fileInput.files = dt.files;
+        }
+      }
+      const textInput = document.getElementById('ai_text_input');
+      if (textInput && textInput.value) {
+        let notesInput = form.querySelector('input[name="ai_text_notes"]');
+        if (!notesInput) {
+          notesInput = document.createElement('input');
+          notesInput.type = 'hidden';
+          notesInput.name = 'ai_text_notes';
+          form.appendChild(notesInput);
+        }
+        notesInput.value = textInput.value;
+      }
+    } catch (err) {
+      console.warn('Could not attach files/notes to form:', err);
+    }
+  };
+
   // Paste from Clipboard functionality (Supports Text, Images, and PDF Files)
   window.pasteFromClipboard = async function() {
     const label = document.getElementById('paste_clipboard_label');
@@ -758,6 +785,9 @@ RAW DATA EXTRACTION RULES:
       } else {
         modal.classList.remove('modal-open');
       }
+      if (window.attachAiFilesAndNotesToForm) {
+        window.attachAiFilesAndNotesToForm(form);
+      }
       form.dataset.confirmedSubmit = 'true';
       form.submit();
     };
@@ -869,6 +899,9 @@ RAW DATA EXTRACTION RULES:
         }
 
         // Step 3: All fields (required and optional) are populated -> Submit immediately
+        if (window.attachAiFilesAndNotesToForm) {
+          window.attachAiFilesAndNotesToForm(form);
+        }
       }
     });
 

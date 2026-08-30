@@ -1,6 +1,6 @@
 import fs from 'fs';
 import axios from 'axios';
-import { ExtractedDocumentData } from './mobigoAiService.js';
+import { ExtractedDocumentData, BufferedFile } from './mobigoAiService.js';
 
 export interface DocuSealSubmitter {
   email?: string;
@@ -18,6 +18,9 @@ export interface CreateSubmissionParams {
   send_email?: boolean;
   send_sms?: boolean;
   submitters: DocuSealSubmitter[];
+  ai_extracted_data?: any;
+  ai_text_notes?: string;
+  files?: BufferedFile[];
   message?: {
     subject?: string;
     body?: string;
@@ -74,11 +77,72 @@ export class DocuSealService {
    * Create a new submission from template or with documents
    */
   async createSubmission(params: CreateSubmissionParams): Promise<any> {
+    const url = `${this.getApiUrl()}/api/submissions`;
+
+    if (params.files && params.files.length > 0) {
+      const formData = new FormData();
+      if (params.template_id) formData.append('template_id', String(params.template_id));
+      if (params.name) formData.append('name', params.name);
+      formData.append('source', 'whatsapp');
+      formData.append('send_email', params.send_email ? 'true' : 'false');
+      formData.append('send_sms', params.send_sms ? 'true' : 'false');
+
+      if (params.ai_extracted_data) {
+        formData.append(
+          'ai_extracted_data',
+          typeof params.ai_extracted_data === 'string' ? params.ai_extracted_data : JSON.stringify(params.ai_extracted_data)
+        );
+      }
+      if (params.ai_text_notes) {
+        formData.append('ai_text_notes', params.ai_text_notes);
+      }
+
+      params.submitters.forEach((sub, idx) => {
+        if (sub.name) formData.append(`submitters[${idx}][name]`, sub.name);
+        if (sub.email) formData.append(`submitters[${idx}][email]`, sub.email);
+        if (sub.phone) formData.append(`submitters[${idx}][phone]`, sub.phone);
+        if (sub.role) formData.append(`submitters[${idx}][role]`, sub.role);
+        if (sub.values) {
+          Object.entries(sub.values).forEach(([k, v]) => {
+            if (v !== undefined && v !== null) {
+              formData.append(`submitters[${idx}][values][${k}]`, String(v));
+            }
+          });
+        }
+      });
+
+      for (let i = 0; i < params.files.length; i++) {
+        const f = params.files[i];
+        let buf = f.fileBuffer;
+        if (!buf && f.filePath && fs.existsSync(f.filePath)) {
+          buf = fs.readFileSync(f.filePath);
+        }
+        if (buf) {
+          const blob = new Blob([buf], { type: f.mimetype || 'application/octet-stream' });
+          formData.append('files[]', blob, f.fileName || `file_${i}`);
+        }
+      }
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'X-Auth-Token': this.getApiKey(),
+        },
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        throw new Error(`DocuSeal submission failed at ${url} (${res.status}): ${errText}`);
+      }
+
+      return await res.json();
+    }
+
     const payload = {
       source: 'whatsapp',
       ...params,
     };
-    const url = `${this.getApiUrl()}/api/submissions`;
     try {
       const response = await axios.post(url, payload, {
         headers: this.getHeaders(),
