@@ -1,6 +1,6 @@
 <% if pagy.pages > 1 %>
   <% left_additional_html = local_assigns[:left_additional_html] %>
-  <div class="flex flex-col md:flex-row md:items-center <%= left_additional_html.present? ? 'mt-3' : 'mt-6' %> mb-6 md:my-6 justify-center md:justify-between">
+  <div class="flex flex-col md:flex-row md:items-center <%= left_additional_html.present? ? 'mt-3' : 'mt-6' %> mb-6 md:my-6 justify-center md:justify-between gap-3">
     <div class="text-sm <%= 'mb-2 md:mb-0' if left_additional_html.present? %>">
       <span class="hidden md:inline">
         <% if pagy.count.nil? %>
@@ -11,21 +11,48 @@
       </span>
       <%= left_additional_html %>
     </div>
-    <div class="flex items-center space-x-1.5 justify-center md:justify-end">
+    <div class="flex items-center space-x-2 justify-center md:justify-end">
       <%= local_assigns[:right_additional_html] %>
-      <div class="join">
+      <div class="join items-center">
         <% if pagy.previous %>
-          <%= link_to '«', url_for(params: request.query_parameters.merge('page' => pagy.previous)), class: 'join-item btn min-h-full h-10' %>
+          <%= link_to '«', url_for(params: request.query_parameters.merge('page' => pagy.previous)), class: 'join-item btn min-h-full h-10', title: t('previous', default: 'Previous') %>
         <% else %>
           <span class="join-item btn btn-disabled !bg-base-200 min-h-full h-10">«</span>
         <% end %>
-        <span class="join-item btn font-medium uppercase min-h-full h-10">
-          <%= t('page_number', number: pagy.page, total: pagy.pages, pages: pagy.pages) %>
-        </span>
+
+        <form action="<%= url_for(params: request.query_parameters.except('page')) %>" method="get" class="join-item flex items-center h-10 border-y border-base-content/20 px-2.5 bg-base-100 gap-1.5" data-turbo-action="advance">
+          <% request.query_parameters.except('page').each do |k, v| %>
+            <% if v.is_a?(Array) %>
+              <% v.each do |val| %>
+                <input type="hidden" name="<%= k %>[]" value="<%= val %>">
+              <% end %>
+            <% elsif v.is_a?(Hash) %>
+              <% v.each do |sub_k, val| %>
+                <input type="hidden" name="<%= k %>[<%= sub_k %>]" value="<%= val %>">
+              <% end %>
+            <% else %>
+              <input type="hidden" name="<%= k %>" value="<%= v %>">
+            <% end %>
+          <% end %>
+          <span class="text-xs text-base-content/70 whitespace-nowrap"><%= t('page', default: 'Page') %></span>
+          <input
+            type="number"
+            name="page"
+            min="1"
+            max="<%= pagy.pages %>"
+            value="<%= pagy.page %>"
+            class="input input-xs input-bordered w-14 text-center font-bold h-7 !p-0.5"
+            onkeydown="if(event.key==='Enter'){this.form.submit();}"
+            title="Enter page number and press Enter"
+          />
+          <span class="text-xs text-base-content/70 whitespace-nowrap">/ <strong><%= pagy.pages %></strong></span>
+          <button type="submit" class="btn btn-xs btn-ghost text-primary font-bold h-7 px-1.5 min-h-0">Go</button>
+        </form>
+
         <% if local_assigns[:next_page_path].present? %>
-          <%= link_to '»', local_assigns[:next_page_path], class: 'join-item btn min-h-full h-10' %>
+          <%= link_to '»', local_assigns[:next_page_path], class: 'join-item btn min-h-full h-10', title: t('next', default: 'Next') %>
         <% elsif pagy.next %>
-          <%= link_to '»', url_for(params: request.query_parameters.merge('page' => pagy.next)), class: 'join-item btn min-h-full h-10' %>
+          <%= link_to '»', url_for(params: request.query_parameters.merge('page' => pagy.next)), class: 'join-item btn min-h-full h-10', title: t('next', default: 'Next') %>
         <% else %>
           <span class="join-item btn btn-disabled !bg-base-200 min-h-full h-10">»</span>
         <% end %>
