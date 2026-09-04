@@ -24,48 +24,59 @@ export async function handleInboundEvent(event: InboundMessageEvent): Promise<vo
     });
   }
 
-  // 2. Action: If a file / document is received outside workflow, create direct document submission
-  if (hasMedia && fileBuffer && (mediaType === 'document' || mediaType === 'image')) {
-    try {
-      const fileBase64 = `data:${mimetype || 'application/pdf'};base64,${fileBuffer.toString('base64')}`;
-      const docName = fileName || `WhatsApp_Doc_${Date.now()}.${mediaType === 'image' ? 'jpg' : 'pdf'}`;
+  // 2. Action: If a file / document is received outside workflow, remind user to run /start
+  if (hasMedia && (mediaType === 'document' || mediaType === 'image')) {
+    const defaultTplId = process.env.DOCUSEAL_DEFAULT_TEMPLATE_ID;
+    // Only attempt direct DocuSeal submission if an explicit default template is configured and it's a PDF document
+    if (defaultTplId && mediaType === 'document' && fileBuffer) {
+      try {
+        const fileBase64 = `data:${mimetype || 'application/pdf'};base64,${fileBuffer.toString('base64')}`;
+        const docName = fileName || `WhatsApp_Doc_${Date.now()}.pdf`;
 
-      // Create direct document submission
-      const submission = await docusealService.createSubmission({
-        submitters: [
-          {
-            phone: senderPhone,
-            name: pushName || `WhatsApp User ${senderPhone}`,
-          },
-        ],
-        documents: [
-          {
-            name: docName,
-            file: fileBase64,
-          },
-        ],
-      });
+        const submission = await docusealService.createSubmission({
+          template_id: defaultTplId,
+          submitters: [
+            {
+              phone: senderPhone,
+              name: pushName || `WhatsApp User ${senderPhone}`,
+            },
+          ],
+          documents: [
+            {
+              name: docName,
+              file: fileBase64,
+            },
+          ],
+        });
 
-      console.log(`[Inbound Action] Created DocuSeal submission ${submission?.id || 'OK'} for ${senderPhone}`);
+        console.log(`[Inbound Action] Created DocuSeal submission ${submission?.id || 'OK'} for ${senderPhone}`);
 
-      // Reply back to customer on WhatsApp with signing URL
-      const submitter = submission?.submitters?.[0] || submission?.[0]?.submitters?.[0];
-      const slug = submitter?.slug;
-      const host = docusealService.getPublicUrl();
-      const signingUrl = slug ? `${host}/s/${slug}` : undefined;
+        const submitter = submission?.submitters?.[0] || submission?.[0]?.submitters?.[0];
+        const slug = submitter?.slug;
+        const host = docusealService.getPublicUrl();
+        const signingUrl = slug ? `${host}/s/${slug}` : undefined;
 
-      const replyText = signingUrl
-        ? `✅ *Document Received!*\n\nHello ${pushName || 'there'}, we have prepared your submission.\n\nPlease review and complete the signing process here:\n👉 ${signingUrl}\n\nThank you!`
-        : `✅ *Document Received!*\n\nHello ${pushName || 'there'}, your document *"${docName}"* has been received and processed successfully.`;
+        const replyText = signingUrl
+          ? `✅ *Document Received!*\n\nHello ${pushName || 'there'}, we have prepared your submission.\n\nPlease review and complete the signing process here:\n👉 ${signingUrl}\n\nThank you!`
+          : `✅ *Document Received!*\n\nHello ${pushName || 'there'}, your document *"${docName}"* has been received.`;
 
-      await sendReply(senderPhone, replyText);
-    } catch (err: any) {
-      console.error('[Inbound Action] Error processing received document for submission:', err?.message || err);
-      await sendReply(
-        senderPhone,
-        `⚠️ We received your file, but encountered an issue processing the submission: ${err?.message || err}`
-      ).catch(() => {});
+        await sendReply(senderPhone, replyText);
+        return;
+      } catch (err: any) {
+        console.error('[Inbound Action] Error in direct submission:', err?.message || err);
+      }
     }
+
+    // Default friendly reminder for AI workflow
+    const fileLabel = mediaType === 'image' ? 'photo' : 'document';
+    const reminderMsg =
+      `📎 *We received your ${fileLabel}!* (${fileName || 'Attachment'})\n\n` +
+      `To process customer documents, verify details, or generate contracts with our *AI Document Assistant*:\n\n` +
+      `👉 Please send */start* first to begin a new session.\n\n` +
+      `Once started, you can send all customer photos/documents (IC, payslip, phone IMEI) and reply */ai* when ready!\n\n` +
+      `💡 _Send */start* or */help* anytime._`;
+
+    await sendReply(senderPhone, reminderMsg);
     return;
   }
 

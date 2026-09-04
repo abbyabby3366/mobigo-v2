@@ -406,6 +406,10 @@ export function renderDashboardHtml(): string {
     let activeChatPhone = null;
     let qrPollInterval = null;
     let chatPollInterval = null;
+    let lastRenderedChatKey = '';
+    let lastConvsKey = '';
+    let isFetchingChatMessages = false;
+    let isFetchingConvs = false;
 
     function navigateView(viewName) {
       ['sessions', 'chat', 'submissions'].forEach(v => {
@@ -505,17 +509,28 @@ export function renderDashboardHtml(): string {
 
     // CHAT SYSTEM
     async function loadConversations() {
+      if (isFetchingConvs) return;
+      isFetchingConvs = true;
       try {
         const res = await fetch('/api/chats');
         const data = await res.json();
-        allConversations = data.conversations || [];
-        filterChatList();
+        const convs = data.conversations || [];
+
+        // Check if conversations list has actually changed before thrashing DOM
+        const convsKey = convs.map(c => \`\${c.contact_phone}_\${c.last_timestamp || ''}_\${c.last_message || ''}_\${c.is_agent}\`).join('|');
+        if (convsKey !== lastConvsKey) {
+          lastConvsKey = convsKey;
+          allConversations = convs;
+          filterChatList();
+        }
 
         if (activeChatPhone) {
-          loadMessagesForActiveChat(activeChatPhone);
+          await loadMessagesForActiveChat(activeChatPhone, false);
         }
       } catch (err) {
         console.error('Failed to load chats:', err);
+      } finally {
+        isFetchingConvs = false;
       }
     }
 
@@ -554,6 +569,9 @@ export function renderDashboardHtml(): string {
     }
 
     function selectChatContact(phone, name) {
+      if (activeChatPhone !== phone) {
+        lastRenderedChatKey = '';
+      }
       activeChatPhone = phone;
       const isLid = phone && (phone.length > 13 || phone.startsWith('112') || phone.startsWith('202'));
       const phoneLabel = !isLid && phone && phone.length <= 13 ? '+' + phone : '';
@@ -562,25 +580,50 @@ export function renderDashboardHtml(): string {
       document.getElementById('chatActivePhone').textContent = phoneLabel || (name ? 'WhatsApp Account' : 'ID: ' + phone);
       document.getElementById('chatHeaderActions').style.display = 'flex';
       renderChatContacts(allConversations);
-      loadMessagesForActiveChat(phone);
+      loadMessagesForActiveChat(phone, true);
     }
 
-    async function loadMessagesForActiveChat(phone) {
+    async function loadMessagesForActiveChat(phone, forceScroll = false) {
+      if (isFetchingChatMessages) return;
+      isFetchingChatMessages = true;
       try {
         const res = await fetch(\`/api/chats/\${phone}/messages\`);
         const data = await res.json();
-        renderChatMessages(data.messages || []);
+        const messages = data.messages || [];
+
+        const container = document.getElementById('chatMessagesStream');
+        if (!container) return;
+
+        // Check if user is scrolled near bottom BEFORE updating DOM
+        const threshold = 120;
+        const isNearBottom = (container.scrollHeight - container.scrollTop - container.clientHeight) <= threshold;
+
+        const lastMsg = messages[messages.length - 1];
+        const newChatKey = \`\${phone}_\${messages.length}_\${lastMsg?.id || ''}_\${lastMsg?.timestamp || ''}\`;
+
+        // If messages haven't changed and not forced, skip DOM re-render completely (eliminates lag & scroll jump)
+        if (newChatKey === lastRenderedChatKey && !forceScroll) {
+          return;
+        }
+        lastRenderedChatKey = newChatKey;
+
+        renderChatMessages(messages, forceScroll || isNearBottom);
       } catch (err) {
         console.error('Error fetching messages:', err);
+      } finally {
+        isFetchingChatMessages = false;
       }
     }
 
-    function renderChatMessages(messages) {
+    function renderChatMessages(messages, shouldScrollToBottom = true) {
       const container = document.getElementById('chatMessagesStream');
       if (!messages || messages.length === 0) {
         container.innerHTML = '<div class="flex-1 flex items-center justify-center text-xs text-slate-400">No messages in this conversation.</div>';
         return;
       }
+
+      // Preserve previous scroll position if user has scrolled up to read history
+      const prevScrollTop = container.scrollTop;
 
       container.innerHTML = messages.map(m => {
         const isOut = m.direction === 'OUTBOUND';
@@ -590,7 +633,7 @@ export function renderDashboardHtml(): string {
         let mediaHtml = '';
         if (m.has_media) {
           if (m.media_type === 'image' && m.file_url) {
-            mediaHtml = \`<div class="mb-2"><a href="\${m.file_url}" target="_blank"><img src="\${m.file_url}" class="max-w-xs rounded-lg max-h-60 object-cover shadow-xs hover:opacity-95" alt="Image"/></a></div>\`;
+            mediaHtml = \`<div class="mb-2"><a href="\${m.file_url}" target="_blank"><img src="\${m.file_url}" loading="lazy" class="max-w-xs rounded-lg max-h-60 object-cover shadow-xs hover:opacity-95" alt="Image"/></a></div>\`;
           } else {
             mediaHtml = \`
               <div class="mb-2 p-2.5 bg-black/5 rounded-lg flex items-center gap-2 border border-black/5">
@@ -616,7 +659,11 @@ export function renderDashboardHtml(): string {
         \`;
       }).join('');
 
-      container.scrollTop = container.scrollHeight;
+      if (shouldScrollToBottom) {
+        container.scrollTop = container.scrollHeight;
+      } else {
+        container.scrollTop = prevScrollTop;
+      }
     }
 
     async function sendChatMessage() {
@@ -635,7 +682,7 @@ export function renderDashboardHtml(): string {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text })
         });
-        await loadMessagesForActiveChat(activeChatPhone);
+        await loadMessagesForActiveChat(activeChatPhone, true);
         await loadConversations();
       } catch (err) {
         alert('Failed to send message: ' + err.message);
@@ -663,7 +710,7 @@ export function renderDashboardHtml(): string {
           body: formData
         });
         e.target.value = '';
-        await loadMessagesForActiveChat(activeChatPhone);
+        await loadMessagesForActiveChat(activeChatPhone, true);
         await loadConversations();
       } catch (err) {
         alert('Failed to upload & send file: ' + err.message);
