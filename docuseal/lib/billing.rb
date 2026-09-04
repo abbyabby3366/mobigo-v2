@@ -9,16 +9,16 @@ module Billing
 
   module_function
 
-  def notification_recipient
-    raw = ENV['WHATSAPP_NOTIFY_PHONE'].presence ||
-          (defined?(MobigoManagementSync) && MobigoManagementSync.respond_to?(:read_env_value) ? MobigoManagementSync.read_env_value('WHATSAPP_NOTIFY_PHONE') : nil).presence ||
-          DEFAULT_NOTIFICATION_RECIPIENT
-
+  def format_recipient(raw)
     raw_str = raw.to_s.strip
+    return nil if raw_str.blank?
+
     if raw_str.include?('@g.us') || raw_str.include?('@newsletter') || raw_str.include?('@s.whatsapp.net')
       raw_str
     else
       raw_num = raw_str.gsub(/[^0-9+]/, '')
+      return nil if raw_num.blank?
+
       if raw_num.start_with?('0')
         "60#{raw_num.sub(/^0+/, '')}"
       elsif raw_num.start_with?('+')
@@ -29,6 +29,28 @@ module Billing
         "60#{raw_num}"
       end
     end
+  end
+
+  def notification_recipients
+    recipients = []
+
+    # 1. Primary WhatsApp notify phone / group (receives both signings & credit alerts)
+    raw_primary = ENV['WHATSAPP_NOTIFY_PHONE'].presence ||
+                  (defined?(MobigoManagementSync) && MobigoManagementSync.respond_to?(:read_env_value) ? MobigoManagementSync.read_env_value('WHATSAPP_NOTIFY_PHONE') : nil).presence ||
+                  DEFAULT_NOTIFICATION_RECIPIENT
+    recipients.concat(raw_primary.to_s.split(/[;,]/)) if raw_primary.present?
+
+    # 2. Specific Credits / Billing alert phone / group
+    raw_credit = ENV['WHATSAPP_CREDIT_NOTIFY_PHONE'].presence ||
+                 ENV['WHATSAPP_CREDITS_NOTIFY_PHONE'].presence ||
+                 (defined?(MobigoManagementSync) && MobigoManagementSync.respond_to?(:read_env_value) ? (MobigoManagementSync.read_env_value('WHATSAPP_CREDIT_NOTIFY_PHONE') || MobigoManagementSync.read_env_value('WHATSAPP_CREDITS_NOTIFY_PHONE')) : nil).presence
+    recipients.concat(raw_credit.to_s.split(/[;,]/)) if raw_credit.present?
+
+    recipients.map { |r| format_recipient(r) }.compact.uniq
+  end
+
+  def notification_recipient
+    notification_recipients.first || DEFAULT_NOTIFICATION_RECIPIENT
   end
 
   def sufficient_balance?(account)
@@ -151,22 +173,25 @@ module Billing
         "👉 *Top Up Balance:* https://mobigo.io7.my/settings/billing"
       end
 
-      payload = {
-        number: notification_recipient,
-        message: message
-      }
+      targets = notification_recipients
+      targets.each do |target_recipient|
+        payload = {
+          number: target_recipient,
+          message: message
+        }
 
-      uri = URI(WHATSAPP_NOTIFICATION_ENDPOINT)
-      req = Net::HTTP::Post.new(uri, { 'Content-Type' => 'application/json' })
-      req.body = payload.to_json
+        uri = URI(WHATSAPP_NOTIFICATION_ENDPOINT)
+        req = Net::HTTP::Post.new(uri, { 'Content-Type' => 'application/json' })
+        req.body = payload.to_json
 
-      http = Net::HTTP.new(uri.hostname, uri.port)
-      http.use_ssl = (uri.scheme == 'https')
-      http.open_timeout = 8
-      http.read_timeout = 8
+        http = Net::HTTP.new(uri.hostname, uri.port)
+        http.use_ssl = (uri.scheme == 'https')
+        http.open_timeout = 8
+        http.read_timeout = 8
 
-      res = http.request(req)
-      Rails.logger.info("Billing WhatsApp notification sent: #{res.code} - #{res.body}")
+        res = http.request(req)
+        Rails.logger.info("Billing WhatsApp notification sent to #{target_recipient}: #{res.code} - #{res.body}")
+      end
     rescue StandardError => e
       Rails.logger.error("Billing WhatsApp notification error: #{e.message}")
     end
