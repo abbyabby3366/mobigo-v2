@@ -6,17 +6,16 @@ require 'base64'
 require_relative 'ai_failure_notifier'
 
 module AiSubmissionExtractor
-  DEFAULT_ROUTER_URL = 'https://router.oino.dev/v1/chat/completions'
-  DEFAULT_API_KEY = 'sk-e5b95619ac694e0a-a72568-c2160a10'
-  DEFAULT_MODEL = 'cx/gpt-5.6-luna'
-  DEFAULT_FALLBACK_MODEL = 'antigravity/gemini-3.6-flash-medium'
+  DEFAULT_ROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
+  DEFAULT_API_KEY = ENV.fetch('AI_ROUTER_KEY', '')
+  DEFAULT_MODEL = 'google/gemini-3.8-flash'
+  DEFAULT_FALLBACK_MODEL = 'z-ai/glm-5.3'
   FALLBACK_MODELS = [
-    'antigravity/gemini-3.6-flash-medium',
-    'antigravity/3.6flash',
-    'antigravity/gemini-3.6-flash',
-    'cursor/gemini-3.6-flash-medium',
-    'auto/gemini',
-    'gemini-3.6-flash'
+    'z-ai/glm-5.3',
+    'z-ai/glm-5.3-flash',
+    'google/gemini-3.7-flash',
+    'google/gemini-2.5-flash',
+    'openai/gpt-4o-mini'
   ].freeze
 
   module_function
@@ -345,7 +344,9 @@ module AiSubmissionExtractor
     uri = URI(api_url)
     req = Net::HTTP::Post.new(uri, {
       'Authorization' => "Bearer #{api_key}",
-      'Content-Type' => 'application/json'
+      'Content-Type' => 'application/json',
+      'HTTP-Referer' => 'https://mobigo.io7.my',
+      'X-Title' => 'Mobigo'
     })
 
     req.body = {

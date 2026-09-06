@@ -11,10 +11,10 @@ module AiCredit
   LOW_CREDITS_THRESHOLD_LOW = 100
   DEFAULT_NOTIFICATION_RECIPIENT = '120363430950545411@g.us'
   WHATSAPP_NOTIFICATION_ENDPOINT = 'https://deswa.io7.my/api/external/send-message'
-  DEFAULT_ROUTER_URL = 'https://router.oino.dev/v1/chat/completions'
-  DEFAULT_ROUTER_KEY = 'sk-e5b95619ac694e0a-a72568-c2160a10'
-  DEFAULT_MODEL = 'cx/gpt-5.6-luna'
-  DEFAULT_FALLBACK_MODEL = 'antigravity/gemini-3.6-flash-medium'
+  DEFAULT_ROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
+  DEFAULT_ROUTER_KEY = ENV.fetch('AI_ROUTER_KEY', '')
+  DEFAULT_MODEL = 'google/gemini-3.8-flash'
+  DEFAULT_FALLBACK_MODEL = 'z-ai/glm-5.3'
 
   module_function
 
@@ -361,6 +361,7 @@ module AiCredit
     host_origin = "#{uri_base.scheme}://#{uri_base.host}:#{uri_base.port}"
 
     balance_paths = [
+      '/api/v1/credits',
       '/v1/user/balance',
       '/v1/credits',
       '/v1/balance',
@@ -389,7 +390,12 @@ module AiCredit
       data = JSON.parse(res.body) rescue nil
       next if data.blank?
 
-      val = data['balance'] || data['credits'] || data['total_available'] || data['available_balance'] || data.dig('data', 'balance')
+      val = if data.is_a?(Hash) && data.dig('data', 'total_credits').present?
+              rem = data.dig('data', 'total_credits').to_f - data.dig('data', 'total_usage').to_f
+              [rem, 0.0].max
+            else
+              data['balance'] || data['credits'] || data['total_available'] || data['available_balance'] || data.dig('data', 'balance')
+            end
       if val.present? && val.to_f >= 0
         fetched_balance = val.to_f.round(2)
         break
