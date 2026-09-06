@@ -3,6 +3,7 @@
 require 'net/http'
 require 'json'
 require 'base64'
+require_relative 'ai_failure_notifier'
 
 module AiSubmissionExtractor
   DEFAULT_ROUTER_URL = 'https://router.oino.dev/v1/chat/completions'
@@ -38,17 +39,44 @@ module AiSubmissionExtractor
 
     models_to_try = ([primary_model, fallback_model] + FALLBACK_MODELS).compact.map(&:to_s).map(&:strip).reject(&:blank?).uniq
 
-    models_to_try.each do |model|
+    models_to_try.each_with_index do |model, idx|
       begin
         response_json = request_chat_completion(api_url, api_key, model, prompt_parts)
         break if response_json
       rescue StandardError => e
         errors << "#{model}: #{e.message}"
         Rails.logger.warn("AiSubmissionExtractor attempt failed with model #{model}: #{e.message}")
+
+        if (model == primary_model || idx == 0) && models_to_try.size > 1
+          next_model = models_to_try[idx + 1] || fallback_model
+          begin
+            AiFailureNotifier.notify_primary_failure(
+              template: template,
+              primary_model: model,
+              fallback_model: next_model,
+              error: e.message
+            )
+          rescue StandardError => notify_err
+            Rails.logger.error("Failed to send primary failure WhatsApp alert: #{notify_err.message}")
+          end
+        end
       end
     end
 
-    raise "AI Extraction failed: #{errors.join('; ')}" if response_json.blank?
+    if response_json.blank?
+      begin
+        AiFailureNotifier.notify_fallback_failure(
+          template: template,
+          primary_model: primary_model,
+          fallback_model: fallback_model,
+          error: errors.last.presence || 'All attempted AI models failed',
+          errors_list: errors
+        )
+      rescue StandardError => notify_err
+        Rails.logger.error("Failed to send fallback failure WhatsApp alert: #{notify_err.message}")
+      end
+      raise "AI Extraction failed: #{errors.join('; ')}"
+    end
 
     parsed = parse_ai_response(response_json, template, acc || template&.account)
     AiCredit.deduct_tool_call!(acc || template&.account) if parsed.is_a?(Hash) && parsed[:success]
