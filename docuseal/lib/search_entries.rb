@@ -70,7 +70,7 @@ module SearchEntries
 
           arel
         else
-          "tsvector @@ (quote_literal(coalesce((ts_lexize('english_stem', :keyword))[1], :keyword)) || ':*')::tsquery"
+          "tsvector @@ ((quote_literal(coalesce((ts_lexize('english_stem', :keyword))[1], :keyword)) || ':*')::tsquery || (quote_literal(:keyword) || ':*')::tsquery)"
         end
 
       [sql, { keyword: }]
@@ -83,7 +83,8 @@ module SearchEntries
         Arel.sql("ngram @@ (quote_literal(:term#{terms.size - 1}) ||  ':' || :weight)::tsquery")
       else
         Arel.sql(<<~SQL.squish)
-          (quote_literal(coalesce((ts_lexize('english_stem', :term#{terms.size - 1}))[1], :term#{terms.size - 1})) ||  ':*' || :weight)::tsquery
+          ((quote_literal(coalesce((ts_lexize('english_stem', :term#{terms.size - 1}))[1], :term#{terms.size - 1})) ||  ':*' || :weight)::tsquery ||
+           (quote_literal(:term#{terms.size - 1}) || ':*' || :weight)::tsquery)
         SQL
       end
 
@@ -91,7 +92,8 @@ module SearchEntries
       index = terms.index(term)
 
       arel = Arel.sql(<<~SQL.squish)
-        (quote_literal(coalesce((ts_lexize('english_stem', :term#{index}))[1], :term#{index})) ||  ':' || :weight)::tsquery
+        ((quote_literal(coalesce((ts_lexize('english_stem', :term#{index}))[1], :term#{index})) ||  ':' || :weight)::tsquery ||
+         (quote_literal(:term#{index}) || ':' || :weight)::tsquery)
       SQL
 
       acc ? Arel::Nodes::InfixOperation.new('&&', arel, acc) : arel
@@ -122,7 +124,8 @@ module SearchEntries
         SQL
       else
         <<~SQL.squish
-          tsvector @@ (quote_literal(coalesce((ts_lexize('english_stem', :keyword))[1], :keyword)) || ':*' || :weight)::tsquery
+          tsvector @@ ((quote_literal(coalesce((ts_lexize('english_stem', :keyword))[1], :keyword)) || ':*' || :weight)::tsquery ||
+                       (quote_literal(:keyword) || ':*' || :weight)::tsquery)
         SQL
       end
 
