@@ -293,7 +293,7 @@
           <span>Re-upload / Modify Data</span>
         </button>
 
-        <%= f.submit 'Create Document Submission', class: 'btn btn-neutral !bg-neutral-900 hover:!bg-black !text-white text-xs px-8 !h-11 !rounded-xl shadow-sm hover:shadow-md font-bold cursor-pointer' %>
+        <%= f.submit 'Create Document Submission', id: 'ai_submit_submission_btn', data: { disable_with: 'Creating Submission...' }, class: 'btn btn-neutral !bg-neutral-900 hover:!bg-black !text-white text-xs px-8 !h-11 !rounded-xl shadow-sm hover:shadow-md font-bold cursor-pointer' %>
       </div>
 
     <% end %>

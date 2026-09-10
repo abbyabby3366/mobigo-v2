@@ -779,11 +779,21 @@ RAW DATA EXTRACTION RULES:
 
     const handleContinue = function(ev) {
       if (ev) ev.preventDefault();
+      if (continueBtn) {
+        if (continueBtn.disabled) return;
+        continueBtn.disabled = true;
+        continueBtn.textContent = 'Submitting...';
+      }
       cleanup();
       if (typeof modal.close === 'function') {
         modal.close();
       } else {
         modal.classList.remove('modal-open');
+      }
+      const submitBtn = document.getElementById('ai_submit_submission_btn');
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.value = 'Creating Submission...';
       }
       if (window.attachAiFilesAndNotesToForm) {
         window.attachAiFilesAndNotesToForm(form);
@@ -899,6 +909,11 @@ RAW DATA EXTRACTION RULES:
         }
 
         // Step 3: All fields (required and optional) are populated -> Submit immediately
+        const submitBtn = document.getElementById('ai_submit_submission_btn');
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.value = 'Creating Submission...';
+        }
         if (window.attachAiFilesAndNotesToForm) {
           window.attachAiFilesAndNotesToForm(form);
         }

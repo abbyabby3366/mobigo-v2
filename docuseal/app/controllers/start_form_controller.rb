@@ -113,7 +113,7 @@ class StartFormController < ApplicationController
   def can_resubmit?(submitter)
     submitter.completed_at? && submitter.completed_at > 14.days.ago &&
       %w[api embed mcp].exclude?(submitter.submission.source) &&
-      submitter.account.account_configs.find_or_initialize_by(key: AccountConfig::ALLOW_TO_RESUBMIT).value != false
+      submitter.account.account_configs.find_by(key: AccountConfig::ALLOW_TO_RESUBMIT)&.value.in?([true, 'true'])
   end
 
   def authorize_start!
@@ -145,7 +145,6 @@ class StartFormController < ApplicationController
       .order(id: :desc)
       .where(declined_at: nil)
       .where(external_id: nil)
-      .where(template.preferences['shared_link_2fa'] == true ? {} : { ip: [nil, request.remote_ip] })
       .then { |rel| params[:resubmit].present? || params[:selfsign].present? ? rel.where(completed_at: nil) : rel }
       .find_or_initialize_by(find_params)
 

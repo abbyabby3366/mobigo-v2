@@ -26,6 +26,9 @@ export interface ChatSessionWorkflow {
   extractedData?: ExtractedDocumentData;
   rawAiData?: any;
   missingFieldPrompt?: string;
+  isSubmitting?: boolean;
+  lastSubmissionUrl?: string;
+  lastSubmissionAt?: number;
   updatedAt: string;
 }
 
@@ -826,6 +829,29 @@ export class AgentWorkflowService {
       return; // STRICTLY BLOCKED
     }
 
+    // In-flight concurrency lock: prevent duplicate submissions from rapid taps / message retries
+    if (session.isSubmitting) {
+      await sendTextMessage(
+        sessionId,
+        session.chatJid,
+        `⏳ *Submission already in progress...* Please wait while your document is being generated.`
+      );
+      return;
+    }
+
+    // Debounce check: if duplicate /proceed sent within 60s for the exact same session
+    if (session.lastSubmissionUrl && session.lastSubmissionAt && Date.now() - session.lastSubmissionAt < 60000) {
+      await sendTextMessage(
+        sessionId,
+        session.chatJid,
+        `ℹ️ *A submission was already created a moment ago!*\n\n✍️ *Customer Signing Link:*\n👉 ${session.lastSubmissionUrl}\n\n_To create a new document for another customer, send */start* first._`
+      );
+      return;
+    }
+
+    session.isSubmitting = true;
+    await this.saveSession(session);
+
     // Submit to DocuSeal
     await sendTextMessage(
       sessionId,
@@ -885,6 +911,9 @@ export class AgentWorkflowService {
         signingUrl = `${publicBase}/submissions/${subId}`;
       }
 
+      session.lastSubmissionUrl = signingUrl;
+      session.lastSubmissionAt = Date.now();
+
       const templateName = tpl?.name || 'Document Agreement';
 
       const successMsg =
@@ -909,7 +938,6 @@ export class AgentWorkflowService {
       session.bufferedFiles = [];
       session.extractedData = {};
       session.state = AgentChatState.IDLE;
-      await this.saveSession(session);
     } catch (err: any) {
       console.error('[AgentWorkflowService] DocuSeal Submission Error:', err);
       await sendTextMessage(
@@ -917,6 +945,9 @@ export class AgentWorkflowService {
         session.chatJid,
         `❌ *DocuSeal Submission Error:* ${err.message || err}\n\nPlease check your details and send */proceed* again.`
       );
+    } finally {
+      session.isSubmitting = false;
+      await this.saveSession(session);
     }
   }
 

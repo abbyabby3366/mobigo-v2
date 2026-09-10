@@ -126,7 +126,7 @@
                 </span>
               </div>
               <submit-form data-on="change" class="flex">
-                <%= f.check_box :value, class: 'toggle', checked: account_config.value != false %>
+                <%= f.check_box :value, class: 'toggle', checked: account_config.value.in?([true, 'true']) %>
               </submit-form>
             </div>
           <% end %>

@@ -66,6 +66,19 @@ module MobigoManagementSync
     api_key = read_env_value('MOBIGO_MANAGEMENT_API_KEY').presence || 'mbg_live_19e8ff22ff54e4a7996b5f87c0b7e2e3e07c8a2285cea05d'
 
     endpoint = "#{api_url.chomp('/')}/api/v1/applications"
+
+    # Ensure generated signed contract PDF and audit trail exist before serializing
+    begin
+      if submitter.respond_to?(:documents) && submitter.documents.blank? && submitter.completed_at?
+        Submissions::EnsureResultGenerated.call(submitter)
+      end
+      if submitter.submission&.completed_at? && submitter.submission&.audit_trail&.blank?
+        Submissions::EnsureAuditGenerated.call(submitter.submission)
+      end
+    rescue StandardError => e
+      Rails.logger.warn("[MobigoSync] Document ensure warning: #{e.message}")
+    end
+
     serialized_data = Submitters::SerializeForWebhook.call(submitter)
 
     if branch_name.present?
@@ -236,6 +249,131 @@ module MobigoManagementSync
     end
   end
 
+  def s3_raw_object_url_for(attachment_or_blob)
+    return nil if attachment_or_blob.blank?
+
+    blob = if attachment_or_blob.respond_to?(:blob)
+             attachment_or_blob.blob
+           elsif attachment_or_blob.is_a?(ActiveStorage::Blob)
+             attachment_or_blob
+           end
+    return nil if blob.blank?
+
+    endpoint = read_env_value('S3_ENDPOINT_URL').presence ||
+               read_env_value('S3_ENDPOINT').presence ||
+               'https://ap-south-1.linodeobjects.com'
+    bucket = read_env_value('S3_BUCKET_NAME').presence ||
+             read_env_value('S3_ATTACHMENTS_BUCKET').presence ||
+             'x.neuronwww.com'
+
+    clean_ep = endpoint.to_s.chomp('/')
+    clean_ep = "https://#{clean_ep}" unless clean_ep.start_with?('http://', 'https://')
+    "#{clean_ep}/#{bucket}/#{blob.key}"
+  end
+
+  def s3_direct_url_for(attachment_or_blob)
+    return nil if attachment_or_blob.blank?
+
+    blob = if attachment_or_blob.respond_to?(:blob)
+             attachment_or_blob.blob
+           elsif attachment_or_blob.is_a?(ActiveStorage::Blob)
+             attachment_or_blob
+           end
+    return nil if blob.blank?
+
+    # Try ActiveStorage presigned URL if using S3 (valid for up to 7 days in AWS SDK)
+    if blob.service.respond_to?(:bucket) || blob.service.class.name.include?('S3')
+      begin
+        return blob.url(expires_in: 7.days)
+      rescue StandardError => e
+        Rails.logger.warn("[MobigoSync] blob.url error: #{e.message}")
+      end
+    end
+
+    s3_raw_object_url_for(blob)
+  end
+
+  def extract_raw_attachments(submitter)
+    fields = submitter.submission&.template_fields.presence || submitter.submission&.template&.fields || []
+
+    field_map = {}
+    fields.each do |f|
+      sub_uuid = f['submitter_uuid'] || f[:submitter_uuid]
+      next if sub_uuid.present? && sub_uuid != submitter.uuid
+
+      f_uuid = (f['uuid'] || f[:uuid]).to_s
+      fname = (f['name'] || f[:name]).presence || (f['type'] || f[:type]).to_s.titleize
+      ftype = (f['type'] || f[:type]).to_s
+      field_map[f_uuid] = { 'name' => fname, 'type' => ftype }
+    end
+
+    raw_attachments = []
+    category_urls = {}
+    raw_fields_s3 = {}
+
+    if submitter.respond_to?(:attachments) && submitter.attachments.attached?
+      submitter.attachments.each do |att|
+        blob = att.blob
+        next unless blob.present?
+
+        s3_url = s3_direct_url_for(blob)
+        direct_s3_url = s3_raw_object_url_for(blob)
+        proxy_url = (ActiveStorage::Blob.proxy_url(blob) rescue nil)
+
+        att_uuid = att.uuid.to_s
+        f_info = field_map[att_uuid] || {}
+
+        if f_info.blank? && submitter.values.is_a?(Hash)
+          submitter.values.each do |f_uuid, val|
+            if val.to_s == att_uuid || (val.is_a?(Array) && val.map(&:to_s).include?(att_uuid))
+              f_info = field_map[f_uuid.to_s] || {}
+              break if f_info.present?
+            end
+          end
+        end
+
+        field_name = f_info['name'].presence || att.filename.to_s
+        field_type = f_info['type'].presence || 'file'
+
+        item = {
+          'field' => field_name,
+          'field_type' => field_type,
+          'filename' => att.filename.to_s,
+          'content_type' => att.content_type.to_s,
+          'byte_size' => att.byte_size.to_i,
+          's3_url' => s3_url,
+          'direct_s3_url' => direct_s3_url,
+          'url' => s3_url,
+          'proxy_url' => proxy_url
+        }
+        raw_attachments << item
+        raw_fields_s3[field_name] = s3_url
+
+        combined = "#{field_name} #{att.filename}".downcase
+
+        if combined.match?(/\b(ic\s*front|kad\s*pengenalan.*depan|mykad.*depan|mykad.*front|depan\s*ic|front\s*ic)\b/i)
+          category_urls['ic_front_url'] ||= s3_url
+        elsif combined.match?(/\b(ic\s*back|kad\s*pengenalan.*belakang|mykad.*belakang|mykad.*back|belakang\s*ic|back\s*ic)\b/i)
+          category_urls['ic_back_url'] ||= s3_url
+        elsif combined.match?(/\b(selfie|gambar\s*pemohon|gambar\s*muka|face)\b/i)
+          category_urls['selfie_url'] ||= s3_url
+        elsif combined.match?(/\b(slip\s*gaji|payslip|penyata\s*gaji|salary|gaji)\b/i)
+          category_urls['payslip_url'] ||= s3_url
+        elsif combined.match?(/\b(penyata\s*bank|bank\s*statement|bank)\b/i)
+          category_urls['bank_statement_url'] ||= s3_url
+        elsif combined.match?(/\b(tandatangan|signature)\b/i) || field_type == 'signature'
+          category_urls['signature_url'] ||= s3_url
+        end
+      end
+    end
+
+    {
+      'raw_attachments' => raw_attachments,
+      'verification_documents' => category_urls,
+      'raw_fields_s3' => raw_fields_s3
+    }
+  end
+
   def build_standardized_payload(submitter, serialized_data, raw_fields, branch_name, doc_name)
     # 1. Customer details
     cust_name = find_field_val(raw_fields, 'Full Name', 'Nama', 'Nama Penuh', 'Name', 'Customer Name', 'Nama Pemohon') ||
@@ -300,9 +438,20 @@ module MobigoManagementSync
     occupation = find_field_val(raw_fields, 'Occupation', 'Pekerjaan', 'Jawatan')
     monthly_salary = parse_numeric(find_field_val(raw_fields, 'Monthly Salary', 'Salary', 'Gaji Bulanan', 'Pendapatan'))
 
-    # 6. Signed Documents
+    # 6. Signed Documents & Audit Logs
     signed_doc_url = serialized_data.dig('documents', 0, 'url') || serialized_data['audit_log_url']
     audit_log_url = serialized_data['audit_log_url'] || serialized_data.dig('submission', 'audit_log_url')
+
+    signed_doc_att = submitter.documents.first rescue nil
+    signed_doc_s3_url = s3_direct_url_for(signed_doc_att)
+    signed_doc_clean_s3 = s3_raw_object_url_for(signed_doc_att)
+
+    audit_log_att = submitter.submission&.audit_trail rescue nil
+    audit_log_s3_url = s3_direct_url_for(audit_log_att)
+    audit_log_clean_s3 = s3_raw_object_url_for(audit_log_att)
+
+    # 7. Raw Attachments & Verification Documents (S3 Links)
+    attachment_data = extract_raw_attachments(submitter)
 
     {
       'submission' => {
@@ -312,7 +461,11 @@ module MobigoManagementSync
         'completed_at' => (submitter.completed_at || Time.current).iso8601,
         'submission_url' => serialized_data['submission_url'],
         'signed_document_url' => signed_doc_url,
-        'audit_log_url' => audit_log_url
+        'signed_document_s3_url' => signed_doc_s3_url,
+        'signed_document_direct_s3_url' => signed_doc_clean_s3,
+        'audit_log_url' => audit_log_url,
+        'audit_log_s3_url' => audit_log_s3_url,
+        'audit_log_direct_s3_url' => audit_log_clean_s3
       },
       'branch' => {
         'name' => branch_name.presence || 'DocuSeal System'
@@ -327,8 +480,14 @@ module MobigoManagementSync
         'homeAddress' => home_address.presence,
         'city' => city.presence,
         'state' => state.presence,
-        'postcode' => postcode.presence
-      },
+        'postcode' => postcode.presence,
+        'icFrontUrl' => attachment_data.dig('verification_documents', 'ic_front_url'),
+        'icBackUrl' => attachment_data.dig('verification_documents', 'ic_back_url'),
+        'selfieUrl' => attachment_data.dig('verification_documents', 'selfie_url'),
+        'signatureUrl' => attachment_data.dig('verification_documents', 'signature_url'),
+        'payslipUrl' => attachment_data.dig('verification_documents', 'payslip_url'),
+        'bankStatementUrl' => attachment_data.dig('verification_documents', 'bank_statement_url')
+      }.compact,
       'product' => {
         'category' => 'Smartphone',
         'brand' => brand,
@@ -356,6 +515,9 @@ module MobigoManagementSync
         'employmentStatus' => 'Employed',
         'monthlySalary' => monthly_salary
       } : nil,
+      'raw_attachments' => attachment_data['raw_attachments'],
+      'verification_documents' => attachment_data['verification_documents'],
+      'raw_fields_s3' => attachment_data['raw_fields_s3'],
       'raw_fields' => raw_fields
     }
   end
