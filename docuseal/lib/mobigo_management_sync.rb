@@ -42,6 +42,9 @@ module MobigoManagementSync
   end
 
   def call(submitter)
+    submitter.reload rescue nil
+    submitter.submission&.reload rescue nil
+
     doc_name = submitter.submission&.template&.name.presence ||
                submitter.submission&.name.presence ||
                submitter.template&.name.presence ||
@@ -147,6 +150,14 @@ module MobigoManagementSync
     # Send WhatsApp notification via https://deswa.io7.my/api/external/send-message
     cust_name = submitter.name || 'Customer'
 
+    raw_files_payload = {
+      'signed_document_url' => standardized_payload.dig('submission', 'signed_document_s3_url') || standardized_payload.dig('submission', 'signed_document_url'),
+      'audit_log_url' => standardized_payload.dig('submission', 'audit_log_s3_url') || standardized_payload.dig('submission', 'audit_log_url'),
+      'verification_documents' => (standardized_payload['verification_documents'] || {}).compact,
+      'raw_attachments' => standardized_payload['raw_attachments'] || []
+    }
+    raw_files_json = JSON.pretty_generate(raw_files_payload)
+
     whatsapp_lines = [
       "🎉 *Phone Rental Agreement Signed & Completed!*",
       "━━━━━━━━━━━━━━━━━━━━━━━",
@@ -156,6 +167,11 @@ module MobigoManagementSync
       "🆔 *Submission ID:* ##{submitter.submission_id}",
       "",
       mobigo_status,
+      "",
+      "📎 *Raw Files Payload:*",
+      "```json",
+      raw_files_json,
+      "```",
       "━━━━━━━━━━━━━━━━━━━━━━━",
       "_Thank you for choosing Mobigo!_"
     ].compact
@@ -311,60 +327,66 @@ module MobigoManagementSync
     category_urls = {}
     raw_fields_s3 = {}
 
-    if submitter.respond_to?(:attachments) && submitter.attachments.attached?
-      submitter.attachments.each do |att|
-        blob = att.blob
-        next unless blob.present?
+    process_attachment = lambda do |att, default_field_name|
+      blob = (att.respond_to?(:blob) ? att.blob : att) rescue nil
+      return unless blob.present?
 
-        s3_url = s3_direct_url_for(blob)
-        direct_s3_url = s3_raw_object_url_for(blob)
-        proxy_url = (ActiveStorage::Blob.proxy_url(blob) rescue nil)
+      s3_url = s3_direct_url_for(blob)
+      direct_s3_url = s3_raw_object_url_for(blob)
+      proxy_url = (ActiveStorage::Blob.proxy_url(blob) rescue nil)
 
-        att_uuid = att.uuid.to_s
-        f_info = field_map[att_uuid] || {}
+      att_uuid = att.respond_to?(:uuid) ? att.uuid.to_s : ''
+      f_info = field_map[att_uuid] || {}
 
-        if f_info.blank? && submitter.values.is_a?(Hash)
-          submitter.values.each do |f_uuid, val|
-            if val.to_s == att_uuid || (val.is_a?(Array) && val.map(&:to_s).include?(att_uuid))
-              f_info = field_map[f_uuid.to_s] || {}
-              break if f_info.present?
-            end
+      if f_info.blank? && submitter.values.is_a?(Hash)
+        submitter.values.each do |f_uuid, val|
+          if val.to_s == att_uuid || (val.is_a?(Array) && val.map(&:to_s).include?(att_uuid))
+            f_info = field_map[f_uuid.to_s] || {}
+            break if f_info.present?
           end
         end
-
-        field_name = f_info['name'].presence || att.filename.to_s
-        field_type = f_info['type'].presence || 'file'
-
-        item = {
-          'field' => field_name,
-          'field_type' => field_type,
-          'filename' => att.filename.to_s,
-          'content_type' => att.content_type.to_s,
-          'byte_size' => att.byte_size.to_i,
-          's3_url' => s3_url,
-          'direct_s3_url' => direct_s3_url,
-          'url' => s3_url,
-          'proxy_url' => proxy_url
-        }
-        raw_attachments << item
-        raw_fields_s3[field_name] = s3_url
-
-        combined = "#{field_name} #{att.filename}".downcase
-
-        if combined.match?(/\b(ic\s*front|kad\s*pengenalan.*depan|mykad.*depan|mykad.*front|depan\s*ic|front\s*ic)\b/i)
-          category_urls['ic_front_url'] ||= s3_url
-        elsif combined.match?(/\b(ic\s*back|kad\s*pengenalan.*belakang|mykad.*belakang|mykad.*back|belakang\s*ic|back\s*ic)\b/i)
-          category_urls['ic_back_url'] ||= s3_url
-        elsif combined.match?(/\b(selfie|gambar\s*pemohon|gambar\s*muka|face)\b/i)
-          category_urls['selfie_url'] ||= s3_url
-        elsif combined.match?(/\b(slip\s*gaji|payslip|penyata\s*gaji|salary|gaji)\b/i)
-          category_urls['payslip_url'] ||= s3_url
-        elsif combined.match?(/\b(penyata\s*bank|bank\s*statement|bank)\b/i)
-          category_urls['bank_statement_url'] ||= s3_url
-        elsif combined.match?(/\b(tandatangan|signature)\b/i) || field_type == 'signature'
-          category_urls['signature_url'] ||= s3_url
-        end
       end
+
+      field_name = f_info['name'].presence || default_field_name.presence || att.filename.to_s
+      field_type = f_info['type'].presence || 'file'
+
+      item = {
+        'field' => field_name,
+        'field_type' => field_type,
+        'filename' => att.filename.to_s,
+        'content_type' => att.content_type.to_s,
+        'byte_size' => att.byte_size.to_i,
+        's3_url' => s3_url,
+        'direct_s3_url' => direct_s3_url,
+        'url' => s3_url,
+        'proxy_url' => proxy_url
+      }
+      raw_attachments << item
+      raw_fields_s3[field_name] = s3_url
+
+      combined = "#{field_name} #{att.filename}".downcase
+
+      if combined.match?(/\b(ic\s*front|kad\s*pengenalan.*depan|mykad.*depan|mykad.*front|depan\s*ic|front\s*ic)\b/i)
+        category_urls['ic_front_url'] ||= s3_url
+      elsif combined.match?(/\b(ic\s*back|kad\s*pengenalan.*belakang|mykad.*belakang|mykad.*back|belakang\s*ic|back\s*ic)\b/i)
+        category_urls['ic_back_url'] ||= s3_url
+      elsif combined.match?(/\b(selfie|gambar\s*pemohon|gambar\s*muka|face)\b/i)
+        category_urls['selfie_url'] ||= s3_url
+      elsif combined.match?(/\b(slip\s*gaji|payslip|penyata\s*gaji|salary|gaji)\b/i)
+        category_urls['payslip_url'] ||= s3_url
+      elsif combined.match?(/\b(penyata\s*bank|bank\s*statement|bank)\b/i)
+        category_urls['bank_statement_url'] ||= s3_url
+      elsif combined.match?(/\b(tandatangan|signature)\b/i) || field_type == 'signature'
+        category_urls['signature_url'] ||= s3_url
+      end
+    end
+
+    if submitter.respond_to?(:attachments) && submitter.attachments.attached?
+      submitter.attachments.each { |att| process_attachment.call(att, nil) }
+    end
+
+    if submitter.submission.respond_to?(:ai_input_files) && submitter.submission.ai_input_files.attached?
+      submitter.submission.ai_input_files.each { |att| process_attachment.call(att, att.filename.to_s) }
     end
 
     {
@@ -439,10 +461,8 @@ module MobigoManagementSync
     monthly_salary = parse_numeric(find_field_val(raw_fields, 'Monthly Salary', 'Salary', 'Gaji Bulanan', 'Pendapatan'))
 
     # 6. Signed Documents & Audit Logs
-    signed_doc_url = serialized_data.dig('documents', 0, 'url') || serialized_data['audit_log_url']
-    audit_log_url = serialized_data['audit_log_url'] || serialized_data.dig('submission', 'audit_log_url')
-
-    signed_doc_att = submitter.documents.first rescue nil
+    signed_doc_att = (submitter.respond_to?(:documents) && submitter.documents.first) ||
+                     (submitter.submission.respond_to?(:documents) && submitter.submission.documents.first) rescue nil
     signed_doc_s3_url = s3_direct_url_for(signed_doc_att)
     signed_doc_clean_s3 = s3_raw_object_url_for(signed_doc_att)
 
@@ -450,8 +470,19 @@ module MobigoManagementSync
     audit_log_s3_url = s3_direct_url_for(audit_log_att)
     audit_log_clean_s3 = s3_raw_object_url_for(audit_log_att)
 
+    signed_doc_url = serialized_data.dig('documents', 0, 'url') || signed_doc_s3_url || serialized_data['audit_log_url']
+    audit_log_url = serialized_data['audit_log_url'] || serialized_data.dig('submission', 'audit_log_url') || audit_log_s3_url
+
     # 7. Raw Attachments & Verification Documents (S3 Links)
     attachment_data = extract_raw_attachments(submitter)
+
+    # Fallback to signature in raw fields if not already in attachments
+    sig_url = attachment_data.dig('verification_documents', 'signature_url') ||
+              find_field_val(raw_fields, 'Tandatangan Penerima (Page 25)', 'Tandatangan Penerima (Page 26)', 'Signature', 'Tandatangan')
+    if sig_url.present?
+      attachment_data['verification_documents'] ||= {}
+      attachment_data['verification_documents']['signature_url'] ||= sig_url
+    end
 
     {
       'submission' => {
@@ -484,7 +515,7 @@ module MobigoManagementSync
         'icFrontUrl' => attachment_data.dig('verification_documents', 'ic_front_url'),
         'icBackUrl' => attachment_data.dig('verification_documents', 'ic_back_url'),
         'selfieUrl' => attachment_data.dig('verification_documents', 'selfie_url'),
-        'signatureUrl' => attachment_data.dig('verification_documents', 'signature_url'),
+        'signatureUrl' => sig_url,
         'payslipUrl' => attachment_data.dig('verification_documents', 'payslip_url'),
         'bankStatementUrl' => attachment_data.dig('verification_documents', 'bank_statement_url')
       }.compact,

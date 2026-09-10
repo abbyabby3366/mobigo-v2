@@ -36,9 +36,6 @@ module Submitters
         is_last = Submissions.maybe_update_completed_at(submitter.submission)
 
         ProcessSubmitterCompletionJob.perform_async('submitter_id' => submitter.id, 'is_last' => is_last)
-
-        # Sync to Mobigo Management asynchronously on signature completion
-        Thread.new { MobigoManagementSync.call(submitter) }
       end
 
       submitter

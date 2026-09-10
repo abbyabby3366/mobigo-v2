@@ -47,6 +47,13 @@ class ProcessSubmitterCompletionJob
     end
 
     enqueue_completed_webhooks(submitter, is_last:)
+
+    # Sync completed application & signed documents to MobiGo Management
+    begin
+      MobigoManagementSync.call(submitter)
+    rescue StandardError => e
+      Rails.logger.warn("[MobigoSync] Error during completion job sync: #{e.message}")
+    end
   end
 
   def create_completed_submitter!(submitter)
