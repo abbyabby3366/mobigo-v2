@@ -35,18 +35,24 @@ module AiSubmissionExtractor
 
     response_json = nil
     errors = []
+    failed_primary = false
+    successful_model = nil
 
     models_to_try = ([primary_model, fallback_model] + FALLBACK_MODELS).compact.map(&:to_s).map(&:strip).reject(&:blank?).uniq
 
     models_to_try.each_with_index do |model, idx|
       begin
         response_json = request_chat_completion(api_url, api_key, model, prompt_parts)
-        break if response_json
+        if response_json
+          successful_model = model
+          break
+        end
       rescue StandardError => e
         errors << "#{model}: #{e.message}"
         Rails.logger.warn("AiSubmissionExtractor attempt failed with model #{model}: #{e.message}")
 
         if (model == primary_model || idx == 0) && models_to_try.size > 1
+          failed_primary = true
           next_model = models_to_try[idx + 1] || fallback_model
           begin
             AiFailureNotifier.notify_primary_failure(
@@ -78,7 +84,21 @@ module AiSubmissionExtractor
     end
 
     parsed = parse_ai_response(response_json, template, acc || template&.account)
-    AiCredit.deduct_tool_call!(acc || template&.account) if parsed.is_a?(Hash) && parsed[:success]
+    if parsed.is_a?(Hash) && parsed[:success]
+      AiCredit.deduct_tool_call!(acc || template&.account)
+
+      if failed_primary && successful_model.present?
+        begin
+          AiFailureNotifier.notify_fallback_success(
+            template: template,
+            primary_model: primary_model,
+            successful_model: successful_model
+          )
+        rescue StandardError => notify_err
+          Rails.logger.error("Failed to send fallback success WhatsApp alert: #{notify_err.message}")
+        end
+      end
+    end
     parsed
   end
 

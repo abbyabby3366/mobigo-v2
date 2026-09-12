@@ -103,6 +103,25 @@ module AiFailureNotifier
     dispatch(message, async: async)
   end
 
+  def notify_fallback_success(template:, primary_model:, successful_model:, async: true)
+    tpl_name = (template.respond_to?(:name) && template.name.to_s.strip.length > 0) ? template.name.to_s.strip : 'Document Agreement'
+    time_str = current_timestamp_str
+
+    message = <<~MSG.strip
+      ✅ *Mobigo AI Notice - Fallback Succeeded*
+      ━━━━━━━━━━━━━━━━━━━━━━━
+      📑 *Template:* #{tpl_name}
+      ⚠️ *Failed Primary:* #{primary_model}
+      🔄 *Recovered By:* #{successful_model}
+      🎉 *Status:* Fallback model extracted data successfully!
+      ⏰ *Time:* #{time_str}
+      ━━━━━━━━━━━━━━━━━━━━━━━
+      _Automated alert from Mobigo AI Engine_
+    MSG
+
+    dispatch(message, async: async)
+  end
+
   def notify_fallback_failure(template:, primary_model:, fallback_model:, error:, errors_list: [], async: true)
     tpl_name = (template.respond_to?(:name) && template.name.to_s.strip.length > 0) ? template.name.to_s.strip : 'Document Agreement'
     time_str = current_timestamp_str
