@@ -150,13 +150,36 @@ module MobigoManagementSync
     # Send WhatsApp notification via https://deswa.io7.my/api/external/send-message
     cust_name = submitter.name || 'Customer'
 
-    raw_files_payload = {
-      'signed_document_url' => standardized_payload.dig('submission', 'signed_document_s3_url') || standardized_payload.dig('submission', 'signed_document_url'),
-      'audit_log_url' => standardized_payload.dig('submission', 'audit_log_s3_url') || standardized_payload.dig('submission', 'audit_log_url'),
-      'verification_documents' => (standardized_payload['verification_documents'] || {}).compact,
-      'raw_attachments' => standardized_payload['raw_attachments'] || []
-    }
-    raw_files_json = JSON.pretty_generate(raw_files_payload)
+    doc_links = []
+    signed_url = standardized_payload.dig('submission', 'signed_document_s3_url') || standardized_payload.dig('submission', 'signed_document_url')
+    doc_links << "• 📄 *Signed Agreement:*\n#{signed_url}" if signed_url.present?
+
+    audit_url = standardized_payload.dig('submission', 'audit_log_s3_url') || standardized_payload.dig('submission', 'audit_log_url')
+    doc_links << "• 📋 *Audit Trail:*\n#{audit_url}" if audit_url.present?
+
+    vdocs = (standardized_payload['verification_documents'] || {}).compact
+    vdocs.each do |k, url|
+      next if url.blank?
+      label = case k.to_s
+              when 'ic_front_url' then '🪪 *IC (Front)*'
+              when 'ic_back_url' then '🪪 *IC (Back)*'
+              when 'selfie_url' then '🤳 *Selfie with IC*'
+              when 'signature_url' then '✍️ *Customer Signature*'
+              when 'payslip_url' then '💵 *Payslip*'
+              when 'bank_statement_url' then '🏦 *Bank Statement*'
+              else "📎 *#{k.to_s.titleize}*"
+              end
+      doc_links << "• #{label}:\n#{url}"
+    end
+
+    raw_atts = standardized_payload['raw_attachments'] || []
+    raw_atts.each do |att|
+      url = att['s3_url'] || att['url']
+      next if url.blank?
+      next if doc_links.any? { |l| l.include?(url) }
+      fname = att['field'].presence || att['filename'].presence || 'Attachment'
+      doc_links << "• 📎 *#{fname}:*\n#{url}"
+    end
 
     whatsapp_lines = [
       "🎉 *Phone Rental Agreement Signed & Completed!*",
@@ -166,17 +189,19 @@ module MobigoManagementSync
       (branch_name.present? ? "🏢 *Branch:* #{branch_name}" : nil),
       "🆔 *Submission ID:* ##{submitter.submission_id}",
       "",
-      mobigo_status,
-      "",
-      "📎 *Raw Files Payload:*",
-      "```json",
-      raw_files_json,
-      "```",
-      "━━━━━━━━━━━━━━━━━━━━━━━",
-      "_Thank you for choosing Mobigo!_"
-    ].compact
+      mobigo_status.presence
+    ]
 
-    whatsapp_text = whatsapp_lines.join("\n")
+    if doc_links.any?
+      whatsapp_lines << ""
+      whatsapp_lines << "📎 *Documents & Verification Links:*"
+      whatsapp_lines << doc_links.join("\n\n")
+    end
+
+    whatsapp_lines << "━━━━━━━━━━━━━━━━━━━━━━━"
+    whatsapp_lines << "_Thank you for choosing Mobigo!_"
+
+    whatsapp_text = whatsapp_lines.compact.join("\n")
 
     # Send to configured notification phone only if set in .env
     notify_phone = read_env_value('WHATSAPP_NOTIFY_PHONE').presence
