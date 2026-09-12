@@ -69,6 +69,7 @@ module Api
     end
 
     def create
+      normalize_submission_params!
       Params::SubmissionCreateValidator.call(params)
 
       params[:send_email] = true unless params.key?(:send_email)
@@ -169,6 +170,22 @@ module Api
     end
 
     private
+
+    def normalize_submission_params!
+      if params[:submitters].is_a?(String)
+        begin
+          parsed = JSON.parse(params[:submitters])
+          params[:submitters] = parsed if parsed.is_a?(Array)
+        rescue StandardError
+        end
+      elsif params[:submitters].is_a?(ActionController::Parameters) || params[:submitters].is_a?(Hash)
+        params[:submitters] = params[:submitters].values
+      end
+
+      if params.dig(:submission, :submitters).is_a?(ActionController::Parameters) || params.dig(:submission, :submitters).is_a?(Hash)
+        params[:submission][:submitters] = params[:submission][:submitters].values
+      end
+    end
 
     def assign_submission_attrs(submission, attrs)
       archived = attrs.key?(:archived) ? attrs[:archived] : attrs[:archived_at]

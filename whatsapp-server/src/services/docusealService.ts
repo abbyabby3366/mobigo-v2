@@ -123,25 +123,42 @@ export class DocuSealService {
         }
       }
 
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'X-Auth-Token': this.getApiKey(),
-        },
-        body: formData,
-      });
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'X-Auth-Token': this.getApiKey(),
+          },
+          body: formData,
+        });
 
-      if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        throw new Error(`DocuSeal submission failed at ${url} (${res.status}): ${errText}`);
+        if (!res.ok) {
+          const errText = await res.text().catch(() => '');
+          if (res.status === 422 && errText.includes('submitters must be a Array')) {
+            console.warn(`[DocuSeal] Multipart submission failed with 422 (${errText}). Retrying via standard JSON payload...`);
+            return await this.createJsonSubmission(url, params);
+          }
+          throw new Error(`DocuSeal submission failed at ${url} (${res.status}): ${errText}`);
+        }
+
+        return await res.json();
+      } catch (fetchErr: any) {
+        if (fetchErr.message?.includes('submitters must be a Array')) {
+          console.warn(`[DocuSeal] Multipart failed with submitters error. Falling back to JSON: ${fetchErr.message}`);
+          return await this.createJsonSubmission(url, params);
+        }
+        throw fetchErr;
       }
-
-      return await res.json();
     }
 
+    return await this.createJsonSubmission(url, params);
+  }
+
+  private async createJsonSubmission(url: string, params: CreateSubmissionParams): Promise<any> {
+    const { files, ...jsonParams } = params;
     const payload = {
       source: 'whatsapp',
-      ...params,
+      ...jsonParams,
     };
     try {
       const response = await axios.post(url, payload, {

@@ -3,6 +3,16 @@
 module Params
   class SubmissionCreateValidator < BaseValidator
     def call
+      if params[:submitters].is_a?(ActionController::Parameters) || params[:submitters].is_a?(Hash)
+        params[:submitters] = params[:submitters].values
+      elsif params[:submitters].is_a?(String)
+        begin
+          parsed = JSON.parse(params[:submitters])
+          params[:submitters] = parsed if parsed.is_a?(Array)
+        rescue StandardError
+        end
+      end
+
       if params[:submission].blank? && (params[:emails].present? || params[:email].present?)
         validate_creation_from_emails(params)
       elsif params.key?(:submitters)
