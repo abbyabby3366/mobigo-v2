@@ -94,7 +94,14 @@ module Api
           branch_name = submitter.values['branch_name'].to_s.strip
         end
 
-        base_title = submission.template&.name.to_s.downcase.include?('ctos') ? 'CTOS Consent Form' : 'Phone Rental'
+        tpl_name = submission.template&.name.to_s.downcase
+        base_title = if tpl_name.include?('ctos')
+                       'CTOS Consent Form'
+                     elsif tpl_name.include?('ansuran')
+                       'Phone Ansuran'
+                     else
+                       'Phone Rental'
+                     end
         parts = [base_title]
         parts << order_number if order_number.present?
         result_title = parts.join(' ')
