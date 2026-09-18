@@ -181,7 +181,13 @@ class AiSubmissionsController < ApplicationController
     first_vals = normalized_submitters.first&.dig(:values) || normalized_submitters.first&.dig('values') || {}
     order_number = first_vals['Nombor Pesanan'] || first_vals['order_number'] || first_vals['No. Pesanan']
 
-    base_title = template.name.to_s.downcase.include?('ctos') ? 'CTOS Consent Form' : 'Phone Rental'
+    base_title = if template.name.to_s.downcase.include?('ctos')
+                   'CTOS Consent Form'
+                 elsif template.name.to_s.downcase.include?('ansuran')
+                   'Phone Ansuran'
+                 else
+                   'Phone Rental'
+                 end
     parts = [base_title]
     parts << order_number.to_s.strip if order_number.present?
     submission_name = parts.join(' ')

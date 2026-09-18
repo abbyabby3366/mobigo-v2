@@ -7,8 +7,13 @@ module MobigoManagementSync
   module_function
 
   def is_phone_rental_template?(submitter, doc_name)
-    name_str = doc_name.to_s.strip.downcase
-    name_str.include?('phone rental') || name_str.include?('phone-rental')
+    tpl_id = (submitter.submission&.template_id || submitter.template_id rescue nil)
+    return true if [2, 7, 14, 15].include?(tpl_id)
+
+    name_str = "#{doc_name} #{submitter.submission&.name} #{submitter.template&.name}".strip.downcase
+    name_str.include?('phone rental') || name_str.include?('phone-rental') ||
+      name_str.include?('phone ansuran') || name_str.include?('phone-ansuran') ||
+      name_str.include?('ansuran')
   end
 
   def read_env_value(key_name)
@@ -182,7 +187,7 @@ module MobigoManagementSync
     end
 
     whatsapp_lines = [
-      "🎉 *Phone Rental Agreement Signed & Completed!*",
+      "🎉 *Phone Agreement Signed & Completed!*",
       "━━━━━━━━━━━━━━━━━━━━━━━",
       "📄 *Document:* #{doc_name}",
       "👤 *Customer:* #{cust_name}",

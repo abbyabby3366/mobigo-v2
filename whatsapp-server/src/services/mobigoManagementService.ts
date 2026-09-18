@@ -162,15 +162,23 @@ export class MobigoManagementService {
   }
 
   /**
-   * Check if a completed webhook payload belongs to a Phone Rental document
+   * Check if a completed webhook payload belongs to a Phone Rental / Ansuran document
    */
   static isPhoneRentalPayload(rawPayload: any): boolean {
     const envelope = rawPayload?.data || rawPayload || {};
+    const tplId = Number(envelope.template_id || envelope.template?.id);
+    if ([2, 7, 14, 15].includes(tplId)) return true;
+
     const docName = String(
       envelope.template?.name || envelope.template_name || envelope.name || envelope.title || ''
     ).toLowerCase();
 
-    return docName.includes('phone rental') || docName.includes('phone-rental');
+    return (
+      docName.includes('phone rental') ||
+      docName.includes('phone-rental') ||
+      docName.includes('phone ansuran') ||
+      docName.includes('ansuran')
+    );
   }
 
   /**
@@ -186,20 +194,27 @@ export class MobigoManagementService {
     }
 
     const baseUrl = this.getApiUrl();
-    const apiKey = this.getApiKey();
-    const endpoint = `${baseUrl}/api/v1/applications`;
 
-    // Extract branch name from payload if present
+    // Extract branch name and fields from payload
     const envelope = rawWebhookPayload?.data || rawWebhookPayload || {};
     const submitter = envelope.submitters?.[0] || envelope.submitter || {};
     const rawValues = envelope.values || submitter.values || [];
     let extractedBranch = envelope.branch_name || envelope.branchName || submitter.branch_name;
 
-    if (!extractedBranch && Array.isArray(rawValues)) {
-      const match = rawValues.find(
-        (v: any) => v && ['Branch Name', 'branch_name', 'Branch', 'Cawangan', 'cawangan'].includes(v.field || v.name)
-      );
-      if (match?.value) extractedBranch = String(match.value).trim();
+    const fieldMap: Record<string, any> = {};
+    if (Array.isArray(rawValues)) {
+      for (const item of rawValues) {
+        if (item && (item.field || item.name)) {
+          fieldMap[item.field || item.name] = item.value;
+        }
+      }
+    } else if (rawValues && typeof rawValues === 'object') {
+      Object.assign(fieldMap, rawValues);
+    }
+
+    if (!extractedBranch) {
+      const match = fieldMap['Branch Name'] || fieldMap['branch_name'] || fieldMap['Branch'] || fieldMap['Cawangan'] || fieldMap['cawangan'];
+      if (match) extractedBranch = String(match).trim();
     }
 
     if (!extractedBranch && (envelope.name || submitter.submission_name || envelope.submission?.name)) {
@@ -208,50 +223,37 @@ export class MobigoManagementService {
       if (m) extractedBranch = m[1].trim();
     }
 
-    if (extractedBranch) {
-      envelope.branch_name = extractedBranch;
-      if (envelope.data && typeof envelope.data === 'object') {
-        envelope.data.branch_name = extractedBranch;
-      }
-    }
+    const extractedData: ExtractedDocumentData = {
+      name: fieldMap['Name'] || fieldMap['Full Name'] || fieldMap['Nama'] || submitter.name,
+      ic_number: fieldMap['No Kad Pengenalan'] || fieldMap['IC Number'] || fieldMap['IC'],
+      phone_number: fieldMap['Nombor Telefon'] || fieldMap['Phone Number'] || submitter.phone,
+      email: fieldMap['Email'] || submitter.email,
+      address: fieldMap['Alamat Penghantaran'] || fieldMap['Home Address'] || fieldMap['Address'] || fieldMap['Alamat'],
+      product_name: fieldMap['Nama Produk'] || fieldMap['Product Name'],
+      imei: fieldMap['Nombor IMEI'] || fieldMap['IMEI'],
+      product_price: fieldMap['Harga Produk'] || fieldMap['Price'],
+      monthly_rent: fieldMap['Harga Sewa Sebulan'] || fieldMap['Monthly Rent'],
+      total_rent: fieldMap['Jumlah Sewa'] || fieldMap['Total Rent'],
+      order_number: fieldMap['Nombor Pesanan'] || fieldMap['Order Number'],
+      deposit: fieldMap['Deposit Produk'] || fieldMap['Deposit'],
+      rental_duration: fieldMap['Jumlah Tempoh Sewaan'],
+      branch_name: extractedBranch,
+    };
 
-    console.log(`[MobigoManagementService] Forwarding completed signing webhook to -> POST ${endpoint} (Branch: ${extractedBranch || 'N/A'})`);
+    console.log(`[MobigoManagementService] Transforming and forwarding completed webhook to Mobigo Management (Branch: ${extractedBranch || 'N/A'})`);
 
-    try {
-      const response = await axios.post<CreateMobigoApplicationResponse>(endpoint, rawWebhookPayload, {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        timeout: 15000,
-      });
+    const res = await this.createApplication(extractedData, {
+      submissionId: envelope.id || submitter.submission_id,
+      templateName: envelope.template?.name || envelope.name,
+      branchName: extractedBranch,
+    });
 
-      console.log(
-        `[MobigoManagementService] Signed application recorded in Mobigo:`,
-        response.data?.data?.applicationNumber
-      );
+    const statusText = res.success
+      ? `✅ *MobiGo Management:* Recorded as *${res.data?.applicationNumber}* (${baseUrl})`
+      : `⚠️ *MobiGo Management Status:* Error - ${res.error || res.message}`;
 
-      const appNum = response.data?.data?.applicationNumber;
-      const statusText = `✅ *MobiGo Management:* Recorded as *${appNum}* (${baseUrl})`;
-      await this.notifyWhatsAppCompleted(rawWebhookPayload, statusText, extractedBranch);
-
-      return response.data;
-    } catch (err: any) {
-      const errMsg =
-        err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        err?.message ||
-        'Failed to forward completed webhook to Mobigo Management API';
-      console.error(`[MobigoManagementService] Error recording signed application:`, errMsg);
-
-      const statusText = `⚠️ *MobiGo Management Status:* Error - ${errMsg}`;
-      await this.notifyWhatsAppCompleted(rawWebhookPayload, statusText, extractedBranch);
-
-      return {
-        success: false,
-        error: errMsg,
-      };
-    }
+    await this.notifyWhatsAppCompleted(rawWebhookPayload, statusText, extractedBranch);
+    return res;
   }
 
   /**

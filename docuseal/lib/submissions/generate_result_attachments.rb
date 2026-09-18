@@ -846,6 +846,8 @@ module Submissions
       # 3. Determine base prefix
       base_title = if template&.name.to_s.downcase.include?('ctos')
                      'CTOS Consent Form'
+                   elsif template&.name.to_s.downcase.include?('ansuran')
+                     'Phone Ansuran'
                    else
                      'Phone Rental'
                    end

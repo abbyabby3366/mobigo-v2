@@ -76,8 +76,13 @@ export class AgentWorkflowService {
             rawKeywords.push('fonpintar', 'fon pintar', 'fon', 'fp');
           } else if (t.name?.toLowerCase().includes('ctos') || t.name?.toLowerCase().includes('consent')) {
             rawKeywords.push('ctos', 'cbm', 'consent');
-          } else if (t.name?.toLowerCase().includes('phone rental') || t.name?.toLowerCase().includes('rental service')) {
-            rawKeywords.push('phone rental', 'rental', 'sewa', 'agreement');
+          } else if (
+            t.name?.toLowerCase().includes('phone rental') ||
+            t.name?.toLowerCase().includes('rental service') ||
+            t.name?.toLowerCase().includes('phone ansuran') ||
+            t.name?.toLowerCase().includes('ansuran')
+          ) {
+            rawKeywords.push('phone rental', 'rental', 'sewa', 'agreement', 'phone ansuran', 'ansuran');
           }
 
           return {
@@ -128,9 +133,23 @@ export class AgentWorkflowService {
       if (ctos) return ctos;
     }
 
-    if (lower.includes('phone rental') || lower.includes('rental') || lower.includes('agreement')) {
+    if (
+      lower.includes('phone rental') ||
+      lower.includes('rental') ||
+      lower.includes('agreement') ||
+      lower.includes('phone ansuran') ||
+      lower.includes('ansuran') ||
+      lower.includes('sewa')
+    ) {
       // Prioritize standard agreement if not specifically Fonpintar
-      const pr = templates.find((t) => t.name.toLowerCase().includes('phone rental') && !t.name.toLowerCase().includes('fonpintar'));
+      const pr = templates.find(
+        (t) =>
+          (t.name.toLowerCase().includes('phone rental') ||
+            t.name.toLowerCase().includes('phone ansuran') ||
+            t.id === 15 ||
+            t.id === 2) &&
+          !t.name.toLowerCase().includes('fonpintar')
+      );
       if (pr) return pr;
     }
 
