@@ -11,6 +11,7 @@ module AiSubmissionExtractor
   DEFAULT_MODEL = 'google/gemini-3.8-flash'
   DEFAULT_FALLBACK_MODEL = 'z-ai/glm-5.3'
   FALLBACK_MODELS = [
+    'zai/glm-5.3-flash',
     'z-ai/glm-5.3',
     'z-ai/glm-5.3-flash',
     'google/gemini-3.7-flash',
@@ -382,7 +383,7 @@ module AiSubmissionExtractor
 
     http = Net::HTTP.new(uri.hostname, uri.port)
     http.use_ssl = (uri.scheme == 'https')
-    http.read_timeout = 90
+    http.read_timeout = 30
     http.open_timeout = 20
 
     res = http.request(req)
