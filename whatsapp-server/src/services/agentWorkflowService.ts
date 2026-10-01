@@ -72,7 +72,9 @@ export class AgentWorkflowService {
             ...(t.name?.toLowerCase().split(/[\s\-_]+/) || []),
           ].filter(Boolean);
 
-          if (t.name?.toLowerCase().includes('fonpintar') || t.name?.toLowerCase().includes('fon pintar')) {
+          if (t.name?.toLowerCase().includes('hektar')) {
+            rawKeywords.push('hektar', 'hektar ansuran', 'hektar phone ansuran', 'hek');
+          } else if (t.name?.toLowerCase().includes('fonpintar') || t.name?.toLowerCase().includes('fon pintar')) {
             rawKeywords.push('fonpintar', 'fon pintar', 'fon', 'fp');
           } else if (t.name?.toLowerCase().includes('ctos') || t.name?.toLowerCase().includes('consent')) {
             rawKeywords.push('ctos', 'cbm', 'consent');
@@ -123,6 +125,11 @@ export class AgentWorkflowService {
     }
 
     // 2. High priority specific keywords
+    if (lower.includes('hektar') || lower.includes('hek')) {
+      const hektar = templates.find((t) => t.name.toLowerCase().includes('hektar') || t.id === 16);
+      if (hektar) return hektar;
+    }
+
     if (lower.includes('fonpintar') || lower.includes('fon pintar') || lower.includes('fon') || lower.includes('fp')) {
       const fp = templates.find((t) => t.name.toLowerCase().includes('fonpintar') || t.name.toLowerCase().includes('fon pintar'));
       if (fp) return fp;
@@ -141,14 +148,15 @@ export class AgentWorkflowService {
       lower.includes('ansuran') ||
       lower.includes('sewa')
     ) {
-      // Prioritize standard agreement if not specifically Fonpintar
+      // Prioritize standard agreement if not specifically Fonpintar or Hektar
       const pr = templates.find(
         (t) =>
           (t.name.toLowerCase().includes('phone rental') ||
             t.name.toLowerCase().includes('phone ansuran') ||
             t.id === 15 ||
             t.id === 2) &&
-          !t.name.toLowerCase().includes('fonpintar')
+          !t.name.toLowerCase().includes('fonpintar') &&
+          !t.name.toLowerCase().includes('hektar')
       );
       if (pr) return pr;
     }
