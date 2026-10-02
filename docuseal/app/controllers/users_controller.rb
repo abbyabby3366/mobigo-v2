@@ -6,6 +6,8 @@ class UsersController < ApplicationController
   before_action :build_user, only: %i[new create]
   authorize_resource :user, only: %i[new create]
 
+  before_action :load_templates, only: %i[new edit create update]
+
   def index
     @users =
       if params[:status] == 'archived'
@@ -16,7 +18,7 @@ class UsersController < ApplicationController
         @users.active.where.not(role: 'integration')
       end
 
-    @users = @users.preload(account: :account_accesses).where(account: current_account).order(id: :desc)
+    @users = @users.preload(:user_configs, account: :account_accesses).where(account: current_account).order(id: :desc)
 
     respond_to do |format|
       format.html do
@@ -42,6 +44,7 @@ class UsersController < ApplicationController
       if existing_user.archived_at? &&
          current_ability.can?(:manage, existing_user) && current_ability.can?(:manage, @user.account)
         existing_user.assign_attributes(@user.slice(:first_name, :last_name, :role, :account_id))
+        existing_user.password = @user.password if @user.password.present?
         existing_user.archived_at = nil
         @user = existing_user
       else
@@ -51,13 +54,23 @@ class UsersController < ApplicationController
       end
     end
 
-    @user.password = SecureRandom.hex if @user.password.blank?
+    # The form requires a password; the invitation email is only a fallback when none was set (e.g. multitenant)
+    send_invitation = @user.password.blank?
+
+    @user.password = SecureRandom.hex if send_invitation
     @user.role = User::ADMIN_ROLE unless role_valid?(@user.role)
 
     if @user.save
-      UserMailer.invitation_email(@user).deliver_later!
+      update_template_permissions
 
-      redirect_back fallback_location: settings_users_path, notice: I18n.t('user_has_been_invited')
+      if send_invitation
+        UserMailer.invitation_email(@user).deliver_later!
+
+        redirect_back fallback_location: settings_users_path, notice: I18n.t('user_has_been_invited')
+      else
+        redirect_back fallback_location: settings_users_path,
+                      notice: I18n.t('user_has_been_created', default: 'User has been created.')
+      end
     else
       render turbo_stream: turbo_stream.replace(:modal, template: 'users/new'), status: :unprocessable_content
     end
@@ -79,7 +92,9 @@ class UsersController < ApplicationController
       authorize!(:create, @user)
     end
 
-    if @user.update(attrs.except(*(current_user == @user ? %i[password otp_required_for_login role] : %i[password])))
+    if @user.update(attrs.except(*(current_user == @user ? %i[password otp_required_for_login role] : [])))
+      update_template_permissions
+
       if @user.try(:pending_reconfirmation?) && @user.previous_changes.key?(:unconfirmed_email)
         SendConfirmationInstructionsJob.perform_async('user_id' => @user.id)
 
@@ -107,6 +122,18 @@ class UsersController < ApplicationController
 
   def role_valid?(role)
     User::ROLES.include?(role)
+  end
+
+  def load_templates
+    @templates = current_account.templates.active.order(:name)
+  end
+
+  def update_template_permissions
+    # Requests without the permissions fields (e.g. the unarchive button) must not wipe existing access
+    return unless @user.viewer? && params.key?(:all_templates_allowed)
+
+    @user.update_template_permissions!(params[:allowed_template_ids],
+                                       all_allowed: params[:all_templates_allowed] == '1')
   end
 
   def build_user

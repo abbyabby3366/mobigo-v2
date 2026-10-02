@@ -24,10 +24,15 @@
         </span>
       <% end %>
     </div>
-    <% if user.new_record? && !Docuseal.multitenant? %>
+    <% if !Docuseal.multitenant? && user != current_user %>
       <div class="form-control">
-        <%= f.label :password, t('password'), class: 'label' %>
-        <%= f.password_field :password, class: 'base-input' %>
+        <%= f.label :password, user.new_record? ? t('password') : t('new_password'), class: 'label' %>
+        <%= f.password_field :password, class: 'base-input', required: user.new_record?, autocomplete: 'new-password' %>
+        <% if user.persisted? %>
+          <label class="label">
+            <span class="label-text-alt"><%= t('leave_blank_to_keep_the_current_password', default: 'Leave blank to keep the current password.') %></span>
+          </label>
+        <% end %>
       </div>
     <% end %>
     <% if f.object != current_user %>
@@ -37,7 +42,44 @@
           <%= f.select :otp_required_for_login, [[t('enabled'), true], [t('disabled'), false]], { include_blank: false }, class: 'base-select' %>
         </div>
       <% end %>
-      <%= render 'role_select', f: %>
+      <toggle-attribute data-target-id="viewer_template_permissions" data-class-name="hidden" data-value="<%= User::VIEWER_ROLE %>" class="block">
+        <%= render 'role_select', f: %>
+      </toggle-attribute>
+      <% all_templates_allowed = user.viewer? && user.all_templates_allowed? %>
+      <div id="viewer_template_permissions" class="p-3.5 border border-base-300 rounded-xl bg-base-200/50 space-y-3 <%= 'hidden' unless user.viewer? %>">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <span class="font-semibold text-sm block"><%= t('template_access', default: 'Template access') %></span>
+            <span class="text-xs text-base-content/60"><%= t('choose_which_templates_this_viewer_can_see_submissions_for', default: 'Choose which templates this viewer can see submissions for.') %></span>
+          </div>
+          <input type="hidden" name="all_templates_allowed" value="0">
+          <toggle-attribute data-target-id="specific_templates_list" data-class-name="hidden" data-value="false">
+            <label class="flex items-center gap-2 cursor-pointer whitespace-nowrap">
+              <span class="text-xs font-medium"><%= t('all_templates', default: 'All templates') %></span>
+              <input type="checkbox" name="all_templates_allowed" value="1" class="toggle toggle-sm toggle-primary" <%= 'checked' if all_templates_allowed %>>
+            </label>
+          </toggle-attribute>
+        </div>
+        <div id="specific_templates_list" class="space-y-2 pt-2 border-t border-base-300 <%= 'hidden' if all_templates_allowed %>">
+          <div class="text-xs text-base-content/70">
+            <%= t('allowed_templates', default: 'Allowed templates') %>
+          </div>
+          <div class="max-h-52 overflow-y-auto space-y-1.5 p-2 bg-base-100 rounded-lg border border-base-300">
+            <% if @templates.present? %>
+              <% allowed_template_ids = user.allowed_template_ids %>
+              <% @templates.each do |template| %>
+                <label class="flex items-center space-x-2.5 p-1.5 hover:bg-base-200 rounded cursor-pointer text-sm">
+                  <input type="checkbox" name="allowed_template_ids[]" value="<%= template.id %>" class="checkbox checkbox-sm checkbox-primary" <%= 'checked' if allowed_template_ids.include?(template.id) %>>
+                  <span class="flex-grow font-medium truncate"><%= template.name %></span>
+                  <span class="text-xs text-base-content/50 whitespace-nowrap"><%= pluralize(template.submitters.size, 'signer') %></span>
+                </label>
+              <% end %>
+            <% else %>
+              <div class="text-xs text-base-content/50 py-2 text-center"><%= t('no_active_templates_found', default: 'No active templates found.') %></div>
+            <% end %>
+          </div>
+        </div>
+      </div>
     <% end %>
     <% if local_assigns[:extra_fields_html].present? %>
       <%= local_assigns[:extra_fields_html] %>

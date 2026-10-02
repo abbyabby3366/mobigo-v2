@@ -1,7 +1,11 @@
 # frozen_string_literal: true
 
 class MfaSetupController < ApplicationController
-  before_action do
+  before_action only: %i[show new create] do
+    authorize!(:setup_mfa, current_user)
+  end
+
+  before_action only: %i[edit destroy] do
     authorize!(:update, current_user)
   end
 
@@ -18,7 +22,8 @@ class MfaSetupController < ApplicationController
       current_user.otp_required_for_login = true
       current_user.save!
 
-      redirect_to settings_profile_index_path, notice: I18n.t('2fa_has_been_configured')
+      redirect_to can?(:manage, current_user) ? settings_profile_index_path : root_path,
+                  notice: I18n.t('2fa_has_been_configured')
     else
       RateLimit.call("mfa-setup-otp-#{current_user.id}", limit: 5, ttl: 5.minutes, enabled: true)
 

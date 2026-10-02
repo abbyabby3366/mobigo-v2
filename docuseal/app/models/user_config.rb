@@ -26,6 +26,8 @@ class UserConfig < ApplicationRecord
   RECEIVE_COMPLETED_EMAIL = 'receive_completed_email'
   RECEIVE_DECLINED_EMAIL = 'receive_declined_email'
   SHOW_APP_TOUR = 'show_app_tour'
+  ALLOWED_TEMPLATE_IDS = 'allowed_template_ids'
+  ALL_TEMPLATES_ALLOWED = 'all_templates_allowed'
 
   belongs_to :user
 

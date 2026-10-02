@@ -70,12 +70,29 @@
                 <% end %>
               </td>
               <td>
-                <span class="badge badge-info badge-outline whitespace-nowrap">
+                <span class="badge <%= user.viewer? ? 'badge-neutral' : 'badge-info' %> badge-outline whitespace-nowrap">
                   <%= t(user.role) %>
                 </span>
+                <% if user.viewer? %>
+                  <div class="text-xs text-base-content/60 mt-0.5 whitespace-nowrap">
+                    <% if user.all_templates_allowed? %>
+                      <%= t('all_templates', default: 'All templates') %>
+                    <% else %>
+                      <%= pluralize(user.allowed_template_ids.size, 'template') %>
+                    <% end %>
+                  </div>
+                <% end %>
               </td>
               <td>
-                <%= user.current_sign_in_at ? l(user.current_sign_in_at.in_time_zone(current_account.timezone), format: :short, locale: current_account.locale) : '-' %>
+                <% if user.current_sign_in_at %>
+                  <% tz_time = user.current_sign_in_at.in_time_zone(current_account.timezone) %>
+                  <div class="flex flex-col">
+                    <span class="font-medium text-sm"><%= tz_time.strftime('%d-%m-%y') %></span>
+                    <span class="text-xs text-base-content/50"><%= tz_time.strftime('%H:%M') %></span>
+                  </div>
+                <% else %>
+                  <span class="text-base-content/40">-</span>
+                <% end %>
               </td>
               <td class="flex items-center space-x-2 justify-end">
                 <% if params[:status].blank? && can?(:update, user) && user.archived_at.blank? %>

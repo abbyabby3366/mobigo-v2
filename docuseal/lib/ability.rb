@@ -4,6 +4,22 @@ class Ability
   include CanCan::Ability
 
   def initialize(user)
+    return unless user
+
+    if user.viewer?
+      if user.all_templates_allowed?
+        can :read, Submission, account_id: user.account_id
+        can :read, Submitter, account_id: user.account_id
+      else
+        can :read, Submission, account_id: user.account_id, template_id: user.allowed_template_ids
+        can :read, Submitter, account_id: user.account_id, submission: { template_id: user.allowed_template_ids }
+      end
+
+      can :setup_mfa, User, id: user.id
+
+      return
+    end
+
     can %i[read create update], Template, Abilities::TemplateConditions.collection(user) do |template|
       Abilities::TemplateConditions.entity(template, user:, ability: 'manage')
     end

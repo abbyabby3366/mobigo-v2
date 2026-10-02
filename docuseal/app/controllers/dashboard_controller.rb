@@ -10,7 +10,7 @@ class DashboardController < ApplicationController
   skip_authorization_check
 
   def index
-    if params[:dashboard_view] == 'submissions'
+    if current_user&.viewer? || params[:dashboard_view] == 'submissions'
       cookies.permanent[:dashboard_view] = 'submissions'
       session.delete(:templates_unlocked)
       SubmissionsDashboardController.dispatch(:index, request, response)

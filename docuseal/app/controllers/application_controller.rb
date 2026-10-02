@@ -13,6 +13,7 @@ class ApplicationController < ActionController::Base
   before_action :sign_in_for_demo, if: -> { Docuseal.demo? }
   before_action :maybe_redirect_to_setup, unless: :signed_in?
   before_action :authenticate_user!, unless: :devise_controller?
+  before_action :block_viewer_from_restricted_areas!
 
   before_action :set_csp, if: -> { request.get? && !request.headers['HTTP_X_TURBO'] }
 
@@ -34,12 +35,10 @@ class ApplicationController < ActionController::Base
     redirect_to request.referer, alert: 'Too many requests', status: :too_many_requests
   end
 
-  if Rails.env.production? || Rails.env.test?
-    rescue_from CanCan::AccessDenied do |e|
-      Rollbar.warning(e) if defined?(Rollbar)
+  rescue_from CanCan::AccessDenied do |e|
+    Rollbar.warning(e) if defined?(Rollbar)
 
-      redirect_to root_path, alert: e.message
-    end
+    redirect_to root_path, alert: e.message
   end
 
   def default_url_options
@@ -147,5 +146,13 @@ class ApplicationController < ActionController::Base
 
       policy.directives['connect-src'] << 'ws:' if Rails.env.development?
     end
+  end
+
+  def block_viewer_from_restricted_areas!
+    return unless current_user&.viewer?
+    return unless request.path.start_with?('/settings', '/templates', '/folders')
+
+    redirect_to root_path, alert: I18n.t('viewers_cannot_access_templates_or_settings',
+                                         default: 'Viewers cannot access templates or settings.')
   end
 end

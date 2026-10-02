@@ -48,7 +48,8 @@
 #
 class User < ApplicationRecord
   ROLES = [
-    ADMIN_ROLE = 'admin'
+    ADMIN_ROLE = 'admin',
+    VIEWER_ROLE = 'viewer'
   ].freeze
 
   EMAIL_REGEXP = /[^@;,<>\s]+@[^@;,<>\s]+/
@@ -77,8 +78,41 @@ class User < ApplicationRecord
   scope :active, -> { where(archived_at: nil) }
   scope :archived, -> { where.not(archived_at: nil) }
   scope :admins, -> { where(role: ADMIN_ROLE) }
+  scope :viewers, -> { where(role: VIEWER_ROLE) }
 
   validates :email, format: { with: /\A[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\z/ }
+
+  def admin?
+    role == ADMIN_ROLE
+  end
+
+  def viewer?
+    role == VIEWER_ROLE
+  end
+
+  def all_templates_allowed?
+    return true unless viewer?
+
+    user_configs.find { |e| e.key == UserConfig::ALL_TEMPLATES_ALLOWED }&.value == true
+  end
+
+  def allowed_template_ids
+    return [] unless viewer?
+
+    Array(user_configs.find { |e| e.key == UserConfig::ALLOWED_TEMPLATE_IDS }&.value).map(&:to_i)
+  end
+
+  def update_template_permissions!(template_ids, all_allowed:)
+    transaction do
+      user_configs.find_or_initialize_by(key: UserConfig::ALL_TEMPLATES_ALLOWED).update!(value: all_allowed)
+
+      # user_configs.value is NOT NULL, so "no specific templates" is stored as an empty array
+      user_configs.find_or_initialize_by(key: UserConfig::ALLOWED_TEMPLATE_IDS)
+                  .update!(value: all_allowed ? [] : Array(template_ids).compact_blank.map(&:to_i))
+    end
+
+    user_configs.reset
+  end
 
   def access_token
     super || build_access_token.tap(&:save!)
