@@ -10,6 +10,7 @@ module Submissions
       completed_at_to
       created_at_from
       created_at_to
+      phone_only
     ].freeze
 
     DATE_PARAMS = %w[
@@ -30,8 +31,17 @@ module Submissions
       submissions = filter_by_folder(submissions, filters, current_user)
       submissions = filter_by_status(submissions, filters)
       submissions = filter_by_created_at(submissions, filters)
+      submissions = filter_by_phone_only(submissions, filters)
 
       filter_by_completed_at(submissions, filters)
+    end
+
+    def filter_by_phone_only(submissions, filters)
+      return submissions unless filters[:phone_only] == '1' || filters[:phone_only] == 'true'
+
+      t = Submission.arel_table
+      tp = Template.arel_table
+      submissions.where(t[:name].matches('%phone%').or(tp[:name].matches('%phone%')))
     end
 
     def filter_by_author(submissions, filters, current_user)

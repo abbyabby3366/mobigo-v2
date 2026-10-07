@@ -144,6 +144,13 @@ class TemplatesDashboardController < ApplicationController
       return
     end
 
+    if params[:dashboard_view] == 'submissions_by_date'
+      cookies.permanent[:dashboard_view] = 'submissions_by_date'
+      session.delete(:templates_unlocked)
+      redirect_to root_path(dashboard_view: 'submissions_by_date')
+      return
+    end
+
     return if session[:templates_unlocked]
 
     if params[:template_password].present?

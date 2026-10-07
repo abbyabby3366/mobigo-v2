@@ -1,0 +1,33 @@
+<% current_path = (request&.fullpath.presence || request&.path.presence || '/') %>
+<% query_params = (params[:q].present? ? { 'q' => params[:q] } : {}).merge(filter_params.to_h).with_indifferent_access %>
+<% from_date = (Date.parse(query_params[:completed_at_from].to_s) rescue nil) if query_params[:completed_at_from].present? %>
+<% to_date = (Date.parse(query_params[:completed_at_to].to_s) rescue nil) if query_params[:completed_at_to].present? %>
+<% is_active = from_date.present? || to_date.present? %>
+
+<% if is_active %>
+  <div class="flex h-10 px-2.5 py-1 text-base md:text-lg items-center justify-between border text-center text-neutral font-semibold rounded-xl shrink-0 border-neutral-700 bg-base-200">
+    <%= link_to submissions_filter_path('completed_at', query_params.merge(path: current_path, with_remove: true)), data: { turbo_frame: 'modal' }, class: 'flex items-center space-x-1.5 flex-1 min-w-0 pr-1.5' do %>
+      <%= svg_icon('calendar_check', class: 'w-5 h-5 flex-shrink-0 stroke-2 text-primary') %>
+      <span class="font-medium text-xs md:text-sm">
+        <% if from_date && to_date && from_date == to_date %>
+          <%= from_date.strftime('%d-%m-%Y') %>
+        <% else %>
+          <%= from_date ? from_date.strftime('%d-%m-%Y') : '∞' %> - <%= to_date ? to_date.strftime('%d-%m-%Y') : t('today') %>
+        <% end %>
+      </span>
+    <% end %>
+    <% clear_url = if request.present?
+                     (url_for(params: request.query_parameters.except('completed_at_from', 'completed_at_to')) rescue current_path)
+                   else
+                     root_path
+                   end %>
+    <%= link_to clear_url, class: 'rounded-lg ml-1 shrink-0 hover:bg-base-content/20 p-0.5' do %>
+      <%= svg_icon('x', class: 'w-4 h-4') %>
+    <% end %>
+  </div>
+<% else %>
+  <%= link_to submissions_filter_path('completed_at', query_params.merge(path: current_path)), data: { turbo_frame: 'modal' }, class: 'cursor-pointer flex h-10 px-3 py-1 text-base md:text-lg items-center border text-neutral rounded-xl hover:border-neutral-700 space-x-1.5 shrink-0 border-neutral-300' do %>
+    <%= svg_icon('calendar_check', class: 'w-5 h-5 flex-shrink-0 stroke-2') %>
+    <span class="font-normal text-sm md:text-base"><%= t('completed_at') %></span>
+  <% end %>
+<% end %>
