@@ -13,12 +13,8 @@ class SubmissionsByDateDashboardController < ApplicationController
 
     @submissions = Submissions.search(current_user, @submissions, params[:q], search_template: true)
 
-    @phone_only = params[:phone_only] != '0' && params[:phone_only] != 'false'
-    if @phone_only
-      t = Submission.arel_table
-      tp = Template.arel_table
-      @submissions = @submissions.where(t[:name].matches('%phone%').or(tp[:name].matches('%phone%')))
-    end
+    @phone_only = phone_only?
+    @submissions = Submissions::Filter.filter_phone_documents(@submissions) if @phone_only
 
     @base_submissions = Submissions::Filter.call(@submissions, current_user, params.except(:status, :phone_only))
     @all_count = @base_submissions.count
@@ -137,7 +133,7 @@ class SubmissionsByDateDashboardController < ApplicationController
   def fetch_target_submissions
     if params[:submission_ids].present?
       ids = Array.wrap(params[:submission_ids])
-      return current_account.submissions.accessible_by(current_ability).where(id: ids)
+      return current_account.submissions.accessible_by(current_ability).where(id: ids).order(created_at: :desc, id: :desc)
     end
 
     submissions = current_account.submissions.accessible_by(current_ability)
@@ -145,12 +141,7 @@ class SubmissionsByDateDashboardController < ApplicationController
                                  .where(archived_at: nil)
                                  .where(templates: { archived_at: nil })
 
-    phone_only = params[:phone_only] != '0' && params[:phone_only] != 'false'
-    if phone_only
-      t = Submission.arel_table
-      tp = Template.arel_table
-      submissions = submissions.where(t[:name].matches('%phone%').or(tp[:name].matches('%phone%')))
-    end
+    submissions = Submissions::Filter.filter_phone_documents(submissions) if phone_only?
 
     if params[:date].present?
       timezone = current_account.timezone.presence || 'Asia/Kuala_Lumpur'
@@ -162,7 +153,11 @@ class SubmissionsByDateDashboardController < ApplicationController
       end
     end
 
-    submissions
+    submissions.order(created_at: :desc, id: :desc)
+  end
+
+  def phone_only?
+    !params[:phone_only].in?(%w[0 false])
   end
 
   def resolve_submission_attachments(submission)

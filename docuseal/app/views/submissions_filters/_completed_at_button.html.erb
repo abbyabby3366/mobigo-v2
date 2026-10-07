@@ -7,7 +7,7 @@
 <% if is_active %>
   <div class="flex h-10 px-2.5 py-1 text-base md:text-lg items-center justify-between border text-center text-neutral font-semibold rounded-xl shrink-0 border-neutral-700 bg-base-200">
     <%= link_to submissions_filter_path('completed_at', query_params.merge(path: current_path, with_remove: true)), data: { turbo_frame: 'modal' }, class: 'flex items-center space-x-1.5 flex-1 min-w-0 pr-1.5' do %>
-      <%= svg_icon('calendar_check', class: 'w-5 h-5 flex-shrink-0 stroke-2 text-primary') %>
+      <%= svg_icon('calendar_check', class: 'w-5 h-5 flex-shrink-0 stroke-2') %>
       <span class="font-medium text-xs md:text-sm">
         <% if from_date && to_date && from_date == to_date %>
           <%= from_date.strftime('%d-%m-%Y') %>
@@ -21,7 +21,7 @@
                    else
                      root_path
                    end %>
-    <%= link_to clear_url, class: 'rounded-lg ml-1 shrink-0 hover:bg-base-content/20 p-0.5' do %>
+    <%= link_to clear_url, class: 'rounded-lg ml-1 shrink-0 hover:bg-base-content hover:text-white p-0.5' do %>
       <%= svg_icon('x', class: 'w-4 h-4') %>
     <% end %>
   </div>

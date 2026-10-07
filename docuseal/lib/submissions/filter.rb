@@ -37,11 +37,17 @@ module Submissions
     end
 
     def filter_by_phone_only(submissions, filters)
-      return submissions unless filters[:phone_only] == '1' || filters[:phone_only] == 'true'
+      return submissions unless filters[:phone_only].in?(%w[1 true])
 
-      t = Submission.arel_table
-      tp = Template.arel_table
-      submissions.where(t[:name].matches('%phone%').or(tp[:name].matches('%phone%')))
+      filter_phone_documents(submissions)
+    end
+
+    # Uses a subquery instead of the templates table so it works on scopes without a template join
+    def filter_phone_documents(submissions)
+      phone_template_ids = Template.where(Template.arel_table[:name].matches('%phone%')).select(:id)
+
+      submissions.where(Submission.arel_table[:name].matches('%phone%')
+                          .or(Submission.arel_table[:template_id].in(phone_template_ids.arel)))
     end
 
     def filter_by_author(submissions, filters, current_user)

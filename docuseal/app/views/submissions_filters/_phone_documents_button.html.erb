@@ -3,12 +3,12 @@
 
 <a href="<%= phone_toggle_url %>"
    id="phone_documents_only_filter"
-   class="cursor-pointer flex h-10 px-3 py-1 text-base md:text-lg items-center border text-neutral rounded-xl hover:border-neutral-700 space-x-2 shrink-0 select-none transition-colors <%= phone_only ? 'border-neutral-700 bg-base-200/50 font-semibold' : 'border-neutral-300 text-neutral/70 font-normal hover:text-neutral' %>"
+   class="cursor-pointer flex h-10 px-3 py-1 text-base md:text-lg items-center border text-neutral rounded-xl hover:border-neutral-700 space-x-2 shrink-0 select-none transition-colors <%= phone_only ? 'border-neutral-700 bg-base-200/50 font-semibold' : 'border-neutral-300 text-base-content/60 font-normal hover:text-neutral' %>"
    title="<%= phone_only ? 'Click to show all documents' : 'Click to show Phone documents only' %>">
   <input type="checkbox"
          id="phone_documents_only_checkbox"
          <%= 'checked' if phone_only %>
-         class="checkbox checkbox-sm checkbox-primary pointer-events-none rounded cursor-pointer"
+         class="checkbox checkbox-xs pointer-events-none rounded cursor-pointer"
          tabindex="-1"
          aria-label="Phone Documents Only"
          readonly>
