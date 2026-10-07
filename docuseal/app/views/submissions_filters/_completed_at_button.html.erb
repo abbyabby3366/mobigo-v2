@@ -1,4 +1,4 @@
-<% current_path = (request&.fullpath.presence || request&.path.presence || '/') %>
+<% current_path = request.path %>
 <% query_params = (params[:q].present? ? { 'q' => params[:q] } : {}).merge(filter_params.to_h).with_indifferent_access %>
 <% from_date = (Date.parse(query_params[:completed_at_from].to_s) rescue nil) if query_params[:completed_at_from].present? %>
 <% to_date = (Date.parse(query_params[:completed_at_to].to_s) rescue nil) if query_params[:completed_at_to].present? %>
@@ -16,11 +16,7 @@
         <% end %>
       </span>
     <% end %>
-    <% clear_url = if request.present?
-                     (url_for(params: request.query_parameters.except('completed_at_from', 'completed_at_to')) rescue current_path)
-                   else
-                     root_path
-                   end %>
+    <% clear_url = url_for(params: request.query_parameters.except('completed_at_from', 'completed_at_to', 'page')) %>
     <%= link_to clear_url, class: 'rounded-lg ml-1 shrink-0 hover:bg-base-content hover:text-white p-0.5' do %>
       <%= svg_icon('x', class: 'w-4 h-4') %>
     <% end %>
