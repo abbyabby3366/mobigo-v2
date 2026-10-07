@@ -8,12 +8,13 @@ module MobigoManagementSync
 
   def is_phone_rental_template?(submitter, doc_name)
     tpl_id = (submitter.submission&.template_id || submitter.template_id rescue nil)
-    return true if [2, 7, 14, 15, 16].include?(tpl_id)
+    return true if [2, 7, 14, 15, 16, 17].include?(tpl_id)
 
     name_str = "#{doc_name} #{submitter.submission&.name} #{submitter.template&.name}".strip.downcase
     name_str.include?('phone rental') || name_str.include?('phone-rental') ||
       name_str.include?('phone ansuran') || name_str.include?('phone-ansuran') ||
-      name_str.include?('ansuran') || name_str.include?('hektar')
+      name_str.include?('ansuran') || name_str.include?('hektar') ||
+      name_str.include?('great aim')
   end
 
   def read_env_value(key_name)

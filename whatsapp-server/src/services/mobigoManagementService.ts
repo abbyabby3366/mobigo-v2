@@ -167,7 +167,7 @@ export class MobigoManagementService {
   static isPhoneRentalPayload(rawPayload: any): boolean {
     const envelope = rawPayload?.data || rawPayload || {};
     const tplId = Number(envelope.template_id || envelope.template?.id);
-    if ([2, 7, 14, 15, 16].includes(tplId)) return true;
+    if ([2, 7, 14, 15, 16, 17].includes(tplId)) return true;
 
     const docName = String(
       envelope.template?.name || envelope.template_name || envelope.name || envelope.title || ''
@@ -178,7 +178,8 @@ export class MobigoManagementService {
       docName.includes('phone-rental') ||
       docName.includes('phone ansuran') ||
       docName.includes('ansuran') ||
-      docName.includes('hektar')
+      docName.includes('hektar') ||
+      docName.includes('great aim')
     );
   }
 

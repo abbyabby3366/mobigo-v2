@@ -78,6 +78,8 @@ export class AgentWorkflowService {
             rawKeywords.push('fonpintar', 'fon pintar', 'fon', 'fp');
           } else if (t.name?.toLowerCase().includes('ctos') || t.name?.toLowerCase().includes('consent')) {
             rawKeywords.push('ctos', 'cbm', 'consent');
+          } else if (t.name?.toLowerCase().includes('great aim') || t.name?.toLowerCase().includes('greataim')) {
+            // Rely on default name matching only
           } else if (
             t.name?.toLowerCase().includes('phone rental') ||
             t.name?.toLowerCase().includes('rental service') ||
@@ -148,7 +150,7 @@ export class AgentWorkflowService {
       lower.includes('ansuran') ||
       lower.includes('sewa')
     ) {
-      // Prioritize standard agreement if not specifically Fonpintar or Hektar
+      // Prioritize standard agreement if not specifically Fonpintar, Hektar or Great Aim
       const pr = templates.find(
         (t) =>
           (t.name.toLowerCase().includes('phone rental') ||
@@ -156,7 +158,8 @@ export class AgentWorkflowService {
             t.id === 15 ||
             t.id === 2) &&
           !t.name.toLowerCase().includes('fonpintar') &&
-          !t.name.toLowerCase().includes('hektar')
+          !t.name.toLowerCase().includes('hektar') &&
+          !t.name.toLowerCase().includes('great aim')
       );
       if (pr) return pr;
     }
