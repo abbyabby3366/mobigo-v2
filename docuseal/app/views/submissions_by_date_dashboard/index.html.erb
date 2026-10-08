@@ -104,15 +104,17 @@
             <% end %>
             <span class="badge badge-sm badge-outline ml-1 font-mono font-normal opacity-70"><%= date_count %></span>
 
-            <span class="tooltip tooltip-top tooltip-no-touch" data-tip="<%= t('download', default: 'Download') %> (<%= date_count %>)">
-              <button type="button"
-                      data-action="open-download-modal"
-                      data-target="download_modal_<%= date_id %>"
-                      class="btn btn-ghost btn-xs btn-circle ml-0.5 hover:bg-base-300 text-base-content/70 hover:text-base-content transition-colors cursor-pointer"
-                      aria-label="<%= t('download', default: 'Download') %> (<%= date_count %>)">
-                <%= svg_icon('download', class: 'w-4 h-4 stroke-2 pointer-events-none') %>
-              </button>
-            </span>
+            <date-download-trigger data-target="download_modal_<%= date_id %>" class="inline-flex items-center">
+              <span class="tooltip tooltip-top tooltip-no-touch" data-tip="<%= t('download', default: 'Download') %> (<%= date_count %>)">
+                <button type="button"
+                        data-action="open-download-modal"
+                        data-target="download_modal_<%= date_id %>"
+                        class="btn btn-ghost btn-xs btn-circle ml-0.5 hover:bg-base-300 text-base-content/70 hover:text-base-content transition-colors cursor-pointer"
+                        aria-label="<%= t('download', default: 'Download') %> (<%= date_count %>)">
+                  <%= svg_icon('download', class: 'w-4 h-4 stroke-2 pointer-events-none') %>
+                </button>
+              </span>
+            </date-download-trigger>
           </div>
           <div class="border-t border-base-300 flex-1"></div>
         </div>
@@ -126,6 +128,38 @@
 <% end %>
 
 <script nonce="<%= content_security_policy_nonce %>">
+  if (!window.customElements.get('date-download-trigger')) {
+    window.customElements.define('date-download-trigger', class extends HTMLElement {
+      connectedCallback() {
+        const openModal = (e) => {
+          if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+          const targetId = this.getAttribute('data-target') || this.dataset.target;
+          const modal = document.getElementById(targetId);
+          if (!modal) return;
+          if (modal.open) return;
+          if (typeof modal.showModal === 'function') {
+            try { modal.showModal(); } catch (err) { modal.classList.add('modal-open'); }
+          } else {
+            modal.classList.add('modal-open');
+          }
+        };
+
+        this.addEventListener('click', openModal);
+        let touchMoved = false;
+        this.addEventListener('touchstart', () => { touchMoved = false; }, { passive: true });
+        this.addEventListener('touchmove', () => { touchMoved = true; }, { passive: true });
+        this.addEventListener('touchend', (e) => {
+          if (!touchMoved) {
+            openModal(e);
+          }
+        });
+      }
+    });
+  }
+
   if (!window.__submissionsDateDownloadHandler) {
     window.__submissionsDateDownloadHandler = true;
 
@@ -133,9 +167,10 @@
       const modal = document.getElementById(modalId);
       if (!modal) return;
       if (typeof modal.showModal === 'function') {
-        try { modal.showModal(); } catch (e) { /* ignore if already open */ }
+        try { modal.showModal(); } catch (e) { modal.classList.add('modal-open'); }
+      } else {
+        modal.classList.add('modal-open');
       }
-      modal.classList.add('modal-open');
     };
 
     window.closeDownloadModal = function(modalId) {
@@ -152,7 +187,7 @@
       if (openBtn) {
         e.preventDefault();
         e.stopPropagation();
-        const modalId = openBtn.getAttribute('data-target');
+        const modalId = openBtn.getAttribute('data-target') || openBtn.dataset.target;
         window.openDownloadModal(modalId);
         return;
       }
@@ -161,14 +196,14 @@
       if (closeBtn) {
         e.preventDefault();
         e.stopPropagation();
-        const modalId = closeBtn.getAttribute('data-target');
+        const modalId = closeBtn.getAttribute('data-target') || closeBtn.dataset.target;
         window.closeDownloadModal(modalId);
         return;
       }
 
       const zipBtn = e.target.closest('[data-action="download-zip"]');
       if (zipBtn) {
-        const modalId = zipBtn.getAttribute('data-target');
+        const modalId = zipBtn.getAttribute('data-target') || zipBtn.dataset.target;
         setTimeout(() => {
           window.closeDownloadModal(modalId);
         }, 600);
@@ -179,8 +214,8 @@
       if (oneByOneBtn) {
         e.preventDefault();
         e.stopPropagation();
-        const dateId = oneByOneBtn.getAttribute('data-date-id');
-        const docsUrl = oneByOneBtn.getAttribute('data-docs-url');
+        const dateId = oneByOneBtn.getAttribute('data-date-id') || oneByOneBtn.dataset.dateId;
+        const docsUrl = oneByOneBtn.getAttribute('data-docs-url') || oneByOneBtn.dataset.docsUrl;
         if (window.startDownloadOneByOne) {
           window.startDownloadOneByOne(dateId, docsUrl, oneByOneBtn);
         }
@@ -216,25 +251,30 @@
         }
 
         const total = files.length;
+        const isMobileSafariIos = 'ontouchstart' in window && navigator.maxTouchPoints > 0 && /AppleWebKit/i.test(navigator.userAgent);
+        const isSafariIos = isMobileSafariIos || /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
         for (let i = 0; i < total; i++) {
           const file = files[i];
           const percent = Math.round(((i + 1) / total) * 100);
-          if (progressText) progressText.innerText = `Downloading: ${file.filename}`;
-          if (progressCount) progressCount.innerText = `${i + 1} / ${total}`;
+          if (progressText) progressText.innerText = 'Downloading: ' + file.filename;
+          if (progressCount) progressCount.innerText = (i + 1) + ' / ' + total;
           if (progressBar) progressBar.value = percent;
 
           try {
             const fileResp = await fetch(file.url);
             if (!fileResp.ok) throw new Error('File download failed');
             const blob = await fileResp.blob();
-            const blobUrl = URL.createObjectURL(blob);
+            const finalBlob = isSafariIos ? blob.slice(0, blob.size, 'application/octet-stream') : blob;
+            const blobUrl = URL.createObjectURL(finalBlob);
             const a = document.createElement('a');
             a.href = blobUrl;
             a.download = file.filename;
+            if (isSafariIos) a.target = '_blank';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
           } catch (err) {
             const a = document.createElement('a');
             a.href = file.url;
@@ -246,7 +286,7 @@
           }
 
           if (i < total - 1) {
-            await new Promise(resolve => setTimeout(resolve, 400));
+            await new Promise(resolve => setTimeout(resolve, 500));
           }
         }
 
@@ -257,7 +297,7 @@
           if (progressEl) progressEl.classList.add('hidden');
           btn.disabled = false;
           window.closeDownloadModal(modalId);
-        }, 1000);
+        }, 1200);
       } catch (e) {
         console.error('Download error:', e);
         alert('Error downloading files: ' + (e.message || 'Unknown error'));

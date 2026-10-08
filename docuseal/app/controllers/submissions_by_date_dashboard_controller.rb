@@ -68,8 +68,10 @@ class SubmissionsByDateDashboardController < ApplicationController
     zip_buffer = Zip::OutputStream.write_buffer do |zos|
       submissions.each do |submission|
         attachments = resolve_submission_attachments(submission)
-        attachments.each do |attachment|
-          blob = attachment.blob
+        Array(attachments).each do |attachment|
+          blob = attachment.respond_to?(:blob) ? attachment.blob : attachment
+          next unless blob.is_a?(ActiveStorage::Blob)
+
           base_filename = resolve_submission_filename(submission, blob)
           count = (used_filenames[base_filename] += 1)
           entry_name = if count > 1
@@ -102,8 +104,10 @@ class SubmissionsByDateDashboardController < ApplicationController
 
     submissions.each do |submission|
       attachments = resolve_submission_attachments(submission)
-      attachments.each do |attachment|
-        blob = attachment.blob
+      Array(attachments).each do |attachment|
+        blob = attachment.respond_to?(:blob) ? attachment.blob : attachment
+        next unless blob.is_a?(ActiveStorage::Blob)
+
         base_filename = resolve_submission_filename(submission, blob)
         count = (used_filenames[base_filename] += 1)
         filename = if count > 1
@@ -139,7 +143,11 @@ class SubmissionsByDateDashboardController < ApplicationController
     submissions = Submissions::Filter.call(submissions, current_user, params.except(:phone_only))
 
     if params[:date].present?
-      parsed_date = Date.strptime(params[:date].to_s, '%d-%m-%Y') rescue nil
+      parsed_date = begin
+        Date.strptime(params[:date].to_s, '%d-%m-%Y')
+      rescue ArgumentError
+        Date.parse(params[:date].to_s) rescue nil
+      end
       return Submission.none unless parsed_date
 
       submissions = filter_by_date(submissions, parsed_date)
@@ -195,13 +203,15 @@ class SubmissionsByDateDashboardController < ApplicationController
 
   def resolve_submission_filename(submission, blob)
     last_completed = submission.submitters.where.not(completed_at: nil).order(:completed_at).last
+    ext = blob.filename&.extension.presence || 'pdf'
     raw_name = if last_completed
                  Submitters.build_document_filename(last_completed, blob, nil)
                elsif submission.name.present?
-                 "#{submission.name}.#{blob.filename.extension}"
+                 "#{submission.name}.#{ext}"
                else
-                 "#{submission.template&.name || blob.filename.base}.#{blob.filename.extension}"
+                 base = submission.template&.name.presence || blob.filename&.base.presence || 'document'
+                 "#{base}.#{ext}"
                end
-    raw_name.gsub(/[\\\/:\*\?"<>\|]/, '_')
+    raw_name.to_s.gsub(/[\\\/:\*\?"<>\|]/, '_')
   end
 end

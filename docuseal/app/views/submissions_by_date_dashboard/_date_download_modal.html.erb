@@ -3,8 +3,8 @@
 <% zip_url = download_zip_submissions_by_date_index_path(download_params.merge(date: date_str)) %>
 <% docs_url = documents_submissions_by_date_index_path(download_params.merge(date: date_str)) %>
 
-<dialog id="download_modal_<%= date_id %>" class="modal items-start overflow-y-auto" style="z-index: 1000;">
-  <div class="modal-box pt-5 pb-6 px-6 mt-20 bg-base-100 shadow-lg rounded-2xl border border-base-300 relative mx-auto" style="max-width: 28rem; width: 92%;">
+<dialog id="download_modal_<%= date_id %>" class="modal modal-bottom sm:modal-middle" style="z-index: 1000;">
+  <div class="modal-box pt-5 pb-6 px-6 bg-base-100 shadow-2xl rounded-2xl border border-base-300 relative mx-auto" style="max-width: 28rem; width: 92%;">
     <div class="flex items-start justify-between mb-4">
       <div class="flex items-center space-x-3">
         <div class="w-10 h-10 rounded-xl bg-base-200 flex items-center justify-center text-base-content shrink-0">
@@ -17,11 +17,11 @@
           </p>
         </div>
       </div>
-      <button type="button"
-              data-action="close-download-modal"
-              data-target="download_modal_<%= date_id %>"
-              class="btn btn-sm btn-circle btn-ghost text-base-content/60 hover:text-base-content"
-              aria-label="Close">&times;</button>
+      <form method="dialog">
+        <button type="submit"
+                class="btn btn-sm btn-circle btn-ghost text-base-content/60 hover:text-base-content"
+                aria-label="Close">&times;</button>
+      </form>
     </div>
 
     <p class="text-sm text-base-content/80 mb-4">
@@ -32,6 +32,8 @@
       <!-- Option 1: Download as Zip file -->
       <a href="<%= zip_url %>"
          download="submissions_<%= date_str %>.zip"
+         data-turbo="false"
+         target="_blank"
          data-action="download-zip"
          data-target="download_modal_<%= date_id %>"
          class="flex items-center justify-between p-3 rounded-xl border border-base-300 hover:border-neutral-700 hover:bg-base-200 transition-all group cursor-pointer text-base-content">
@@ -81,14 +83,14 @@
 
     <div class="flex mt-4 pt-3 border-t border-base-200">
       <div class="w-full flex justify-end">
-        <button type="button"
-                data-action="close-download-modal"
-                data-target="download_modal_<%= date_id %>"
-                class="btn btn-sm btn-ghost font-normal">Cancel</button>
+        <form method="dialog">
+          <button type="submit" class="btn btn-sm btn-ghost font-normal">Cancel</button>
+        </form>
       </div>
     </div>
   </div>
-  <div class="modal-backdrop" data-action="close-download-modal" data-target="download_modal_<%= date_id %>">
-    <button type="button">close</button>
-  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="submit">close</button>
+  </form>
 </dialog>
+
