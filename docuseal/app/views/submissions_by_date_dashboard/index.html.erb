@@ -3,11 +3,9 @@
 <% if Docuseal.demo? %><%= render 'shared/demo_alert' %><% end %>
 <div class="group/header flex justify-between items-center w-full mb-4">
   <div class="flex items-center flex-grow min-w-0 max-md:group-has-[search-input:focus-within]/header:hidden <%= 'max-md:hidden' if params[:q].present? %>">
-    <% unless current_user&.viewer? %>
-      <div class="mr-2">
-        <%= render 'dashboard/toggle_view', selected: 'submissions_by_date' %>
-      </div>
-    <% end %>
+    <div class="mr-2">
+      <%= render 'dashboard/toggle_view', selected: 'submissions_by_date' %>
+    </div>
     <h1 class="text-2xl truncate md:text-3xl sm:text-4xl font-bold md:block <%= 'hidden' if params[:q].present? %>">
       <%= t('submissions_by_date', default: 'Submissions by date') %>
     </h1>
