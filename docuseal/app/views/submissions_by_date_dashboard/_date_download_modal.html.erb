@@ -1,8 +1,7 @@
 <%# Prompt Modal for downloading documents of a specific date %>
 <% date_str = date.strftime('%d-%m-%Y') %>
-<% docs_count = date_submissions.size %>
-<% zip_url = download_zip_submissions_by_date_index_path(date: date_str, submission_ids:) %>
-<% docs_url = documents_submissions_by_date_index_path(submission_ids:) %>
+<% zip_url = download_zip_submissions_by_date_index_path(download_params.merge(date: date_str)) %>
+<% docs_url = documents_submissions_by_date_index_path(download_params.merge(date: date_str)) %>
 
 <dialog id="download_modal_<%= date_id %>" class="modal items-start overflow-y-auto" style="z-index: 1000;">
   <div class="modal-box pt-5 pb-6 px-6 mt-20 bg-base-100 shadow-lg rounded-2xl border border-base-300 relative mx-auto" style="max-width: 28rem; width: 92%;">

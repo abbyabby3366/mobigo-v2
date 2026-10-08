@@ -5,16 +5,9 @@ class SubmissionsByDateDashboardController < ApplicationController
   skip_authorization_check only: %i[download_zip documents]
 
   def index
-    @submissions = @submissions.left_joins(:template)
-
-    @submissions = @submissions.where(archived_at: nil)
-                               .where(templates: { archived_at: nil })
-                               .preload(:template_accesses, :created_by_user)
-
-    @submissions = Submissions.search(current_user, @submissions, params[:q], search_template: true)
+    @submissions = searched_submissions(@submissions).preload(:template_accesses, :created_by_user)
 
     @phone_only = phone_only?
-    @submissions = Submissions::Filter.filter_phone_documents(@submissions) if @phone_only
 
     @base_submissions = Submissions::Filter.call(@submissions, current_user, params.except(:status, :phone_only))
     @all_count = @base_submissions.count
@@ -22,8 +15,9 @@ class SubmissionsByDateDashboardController < ApplicationController
     @completed_count = @base_submissions.completed.count
 
     @submissions = Submissions::Filter.call(@submissions, current_user, params.except(:phone_only))
+    filtered_submissions = @submissions
 
-    use_completed_date = params[:status] == 'completed' || params[:completed_at_from].present? || params[:completed_at_to].present?
+    use_completed_date = use_completed_date?
 
     @submissions =
       if use_completed_date
@@ -43,7 +37,7 @@ class SubmissionsByDateDashboardController < ApplicationController
     ActiveRecord::Associations::Preloader.new(records: @submissions.filter_map(&:template),
                                               associations: :author).call
 
-    timezone = current_account.timezone.presence || 'Asia/Kuala_Lumpur'
+    timezone = account_timezone
     @today_date = Time.current.in_time_zone(timezone).to_date
     @yesterday_date = @today_date - 1.day
 
@@ -54,6 +48,11 @@ class SubmissionsByDateDashboardController < ApplicationController
                       sub.created_at
                     end
       target_time.in_time_zone(timezone).to_date
+    end
+
+    # Totals per date across all pages, so the download covers every submission of that date
+    @date_counts = @submissions_by_date.keys.index_with do |date|
+      filter_by_date(filtered_submissions, date).count
     end
 
     render 'submissions_by_date_dashboard/index'
@@ -136,24 +135,47 @@ class SubmissionsByDateDashboardController < ApplicationController
       return current_account.submissions.accessible_by(current_ability).where(id: ids).order(created_at: :desc, id: :desc)
     end
 
-    submissions = current_account.submissions.accessible_by(current_ability)
-                                 .left_joins(:template)
-                                 .where(archived_at: nil)
-                                 .where(templates: { archived_at: nil })
-
-    submissions = Submissions::Filter.filter_phone_documents(submissions) if phone_only?
+    submissions = searched_submissions(current_account.submissions.accessible_by(current_ability))
+    submissions = Submissions::Filter.call(submissions, current_user, params.except(:phone_only))
 
     if params[:date].present?
-      timezone = current_account.timezone.presence || 'Asia/Kuala_Lumpur'
-      parsed_date = Date.parse(params[:date].to_s) rescue nil
-      if parsed_date
-        start_time = parsed_date.in_time_zone(timezone).beginning_of_day
-        end_time = parsed_date.in_time_zone(timezone).end_of_day
-        submissions = submissions.where(created_at: start_time..end_time)
-      end
+      parsed_date = Date.strptime(params[:date].to_s, '%d-%m-%Y') rescue nil
+      return Submission.none unless parsed_date
+
+      submissions = filter_by_date(submissions, parsed_date)
     end
 
     submissions.order(created_at: :desc, id: :desc)
+  end
+
+  # Shared by index and the download actions so both see the same set of submissions
+  def searched_submissions(submissions)
+    submissions = submissions.left_joins(:template)
+                             .where(archived_at: nil)
+                             .where(templates: { archived_at: nil })
+
+    submissions = Submissions.search(current_user, submissions, params[:q], search_template: true)
+    submissions = Submissions::Filter.filter_phone_documents(submissions) if phone_only?
+
+    submissions
+  end
+
+  def filter_by_date(submissions, date)
+    range = date.in_time_zone(account_timezone).all_day
+
+    if use_completed_date?
+      submissions.where(completed_at: range)
+    else
+      submissions.where(created_at: range)
+    end
+  end
+
+  def use_completed_date?
+    params[:status] == 'completed' || params[:completed_at_from].present? || params[:completed_at_to].present?
+  end
+
+  def account_timezone
+    current_account.timezone.presence || 'Asia/Kuala_Lumpur'
   end
 
   def phone_only?
