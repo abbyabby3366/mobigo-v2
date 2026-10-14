@@ -22,7 +22,7 @@ module DocuSeal
     config.time_zone = 'Singapore'
 
     config.session_store :cookie_store,
-                         key: '_docuseal_session',
+                         key: '_docu_seal_session',
                          expire_after: ENV.fetch('SESSION_REMEMBER_DAYS', '730').to_i.days
 
     config.autoload_lib(ignore: %w[assets tasks puma])
